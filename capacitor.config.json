@@ -3,7 +3,7 @@
   "appName": "XeGhep.CC",
   "webDir": "dist",
   "server": {
-    "url": "https://xeghep.cc/native.php?fromNativeApp=1&fromApp=iosCapacitor",
+    "url": "https://www.xeghep.cc/native.php?fromNativeApp=1&fromApp=iosCapacitor",
     "cleartext": true
   }
 }

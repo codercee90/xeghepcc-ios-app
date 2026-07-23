@@ -1,0 +1,13 @@
+{
+	"appId": "cc.xeghep.www.ios",
+	"appName": "XeGhep.CC",
+	"webDir": "dist",
+	"server": {
+		"url": "https://www.xeghep.cc/native.php?fromNativeApp=1&fromApp=iosCapacitor",
+		"cleartext": true
+	},
+	"packageClassList": [
+		"GeolocationPlugin",
+		"PushNotificationsPlugin"
+	]
+}
