@@ -9,7 +9,7 @@ on:
 jobs:
   build-ios:
     # BẮT BUỘC dùng máy macos để có Xcode & xcodebuild
-    runs-on: macos-14 
+    runs-on: macos-latest
 
     steps:
       # 1. Lấy source code từ Repository về máy Runner
@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
       # 3. Cài đặt các thư viện Node (npm dependencies)
