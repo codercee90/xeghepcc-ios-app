@@ -1,0 +1,54 @@
+name: Build iOS App
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-ios:
+    runs-on: macos-13
+
+    steps:
+    - name: 1. Checkout source code
+      uses: actions/checkout@v3
+
+    - name: 2. Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: 3. Install Dependencies
+      run: |
+        npm install
+
+    - name: 4. Sync Capacitor
+      run: |
+        npx cap sync ios
+
+    - name: 5. Install CocoaPods
+      run: |
+        cd ios/App
+        pod install
+
+    - name: 6. Build Xcode App
+      run: |
+        xcodebuild -workspace ios/App/App.xcworkspace \
+                   -scheme App \
+                   -sdk iphoneos \
+                   -configuration Release \
+                   -derivedDataPath build \
+                   CODE_SIGN_IDENTITY="" \
+                   CODE_SIGNING_REQUIRED=NO \
+                   CODE_SIGNING_ALLOWED=NO
+
+    - name: 7. Package IPA
+      run: |
+        mkdir -p Payload
+        mv ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
+        zip -r App-Unsigned.ipa Payload
+
+    - name: 8. Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ios-app-build
+        path: App-Unsigned.ipa

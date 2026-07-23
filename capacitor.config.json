@@ -1,0 +1,9 @@
+{
+  "appId": "cc.xeghep.www.ios",
+  "appName": "XeGhep.CC",
+  "webDir": "dist",
+  "server": {
+    "url": "https://xeghep.cc/native.php?fromNativeApp=1&fromApp=iosCapacitor",
+    "cleartext": true
+  }
+}
