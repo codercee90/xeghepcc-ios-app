@@ -2,48 +2,77 @@ name: Build iOS App
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main  # Hoặc master tùy nhánh chính của bạn
+  workflow_dispatch:  # Cho phép bấm nút Build thủ công trên GitHub UI
 
 jobs:
   build-ios:
-    runs-on: macos-latest
+    # BẮT BUỘC dùng máy macos để có Xcode & xcodebuild
+    runs-on: macos-14 
 
     steps:
-    - name: 1. Checkout source code
-      uses: actions/checkout@v4
+      # 1. Lấy source code từ Repository về máy Runner
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: 2. Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 24
+      # 2. Cài đặt Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
 
-    - name: 3. Install Dependencies
-      run: |
-        npm install
+      # 3. Cài đặt các thư viện Node (npm dependencies)
+      - name: Install NPM Dependencies
+        run: npm ci
 
-    - name: 4. Sync Capacitor
-      run: |
-        npx cap sync ios
+      # 4. Build giao diện Webapp (Web Assets)
+      - name: Build Web App
+        run: npm run build
 
-    - name: 5. Build Xcode App
-      run: |
-        xcodebuild -workspace ios/App/App.xcworkspace \
-                   -scheme App \
-                   -sdk iphoneos \
-                   -configuration Release \
-                   -derivedDataPath build \
-                   CODE_SIGN_IDENTITY="" \
-                   CODE_SIGNING_REQUIRED=NO \
-                   CODE_SIGNING_ALLOWED=NO
+      # 5. Cài đặt CocoaPods trên máy macOS của GitHub
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
 
-    - name: 6. Package IPA
-      run: |
-        mkdir -p Payload
-        mv ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
-        zip -r App-Unsigned.ipa Payload
+      # 6. Đồng bộ Capacitor & Khởi tạo thư mục iOS
+      - name: Capacitor Sync iOS
+        run: |
+          # Thêm platform iOS nếu chưa có trong Repo
+          npx cap add ios || true
+          # Sync web assets và native plugins sang thư mục ios
+          npx cap sync ios
 
-    - name: 7. Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ios-app-build
-        path: App-Unsigned.ipa
+      # 7. Chạy Pod Install để tạo file App.xcworkspace (KHẮC PHỤC LỖI EXIT CODE 66)
+      - name: Install Pods
+        run: |
+          cd ios/App
+          pod install
+
+      # 8. Build dự án bằng xcodebuild
+      - name: Build Xcode App (.xcworkspace)
+        run: |
+          xcodebuild -workspace ios/App/App.xcworkspace \
+                     -scheme App \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     -derivedDataPath build \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_ALLOWED=NO
+
+      # 9. Gom file thành gói IPA (Unsigned cho việc test/internal dev)
+      - name: Create Unsigned IPA Package
+        run: |
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -r App-unsigned.ipa Payload
+
+      # 10. Upload file IPA lên phần Artifacts của GitHub Actions để tải về
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-unsigned
+          path: App-unsigned.ipa
+          retention-days: 7
