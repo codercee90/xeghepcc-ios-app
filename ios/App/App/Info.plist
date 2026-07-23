@@ -54,14 +54,18 @@
 	<string>Ứng dụng tài xế cần vị trí liên tục kể cả khi tắt màn hình để cập nhật hành trình.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>Cập nhật vị trí tài xế liên tục trên bản đồ.</string>
-
+	<!-- Quyền truy cập Micro -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ứng dụng cần sử dụng Micro để thu âm giọng nói của người dùng để gửi tin nhắn voice trong khung chat.</string>
+	<!-- Quyền Nhận diện giọng nói -->
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Ứng dụng cần nhận diện giọng nói để chuyển thành văn bản.</string>
 	<!-- Quyền chạy ngầm -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 		<string>remote-notification</string>
 	</array>
-
 	<!-- Cho phép load URL xeghep.cc -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
