@@ -3,49 +3,43 @@ name: Build iOS App
 on:
   push:
     branches:
-      - main  # Hoặc master tùy nhánh chính của bạn
-  workflow_dispatch:  # Cho phép bấm nút Build thủ công trên GitHub UI
+      - main
+  workflow_dispatch:
 
 jobs:
   build-ios:
-    # BẮT BUỘC dùng máy macos để có Xcode & xcodebuild
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
-      # 1. Lấy source code từ Repository về máy Runner
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Cài đặt Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
           cache: 'npm'
 
-      # 3. Cài đặt các thư viện Node (npm dependencies)
       - name: Install NPM Dependencies
         run: npm ci
 
-      # 4. Build giao diện Webapp (Web Assets)
-      - name: Build Web App
-        run: npm run build
+      - name: Build Web App (Bỏ qua nếu không có script)
+        run: npm run build --if-present
 
-      # 5. Cài đặt CocoaPods trên máy macOS của GitHub
-      - name: Install CocoaPods
-        run: |
-          sudo gem install cocoapods
-
-      # 6. Đồng bộ Capacitor & Khởi tạo thư mục iOS
       - name: Capacitor Sync iOS
         run: |
-          # Thêm platform iOS nếu chưa có trong Repo
           npx cap add ios || true
-          # Sync web assets và native plugins sang thư mục ios
           npx cap sync ios
 
-      # 8. Build dự án bằng xcodebuild
-      - name: Build Xcode App (.xcworkspace)
+      # BƯỚC 7 TỐI ƯU: Cài CocoaPods & Chạy Pod Install
+      - name: Install CocoaPods Dependencies
+        run: |
+          sudo gem install cocoapods
+          cd ios/App
+          pod install --repo-update
+
+      # BƯỚC 8: Build Xcode
+      - name: Build Xcode App
         run: |
           xcodebuild -workspace ios/App/App.xcworkspace \
                      -scheme App \
@@ -56,14 +50,12 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGNING_ALLOWED=NO
 
-      # 9. Gom file thành gói IPA (Unsigned cho việc test/internal dev)
       - name: Create Unsigned IPA Package
         run: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/App.app Payload/
           zip -r App-unsigned.ipa Payload
 
-      # 10. Upload file IPA lên phần Artifacts của GitHub Actions để tải về
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
