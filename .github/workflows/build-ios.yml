@@ -15,7 +15,7 @@ jobs:
     - name: 2. Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 22
+        node-version: 24
 
     - name: 3. Install Dependencies
       run: |
@@ -25,12 +25,7 @@ jobs:
       run: |
         npx cap sync ios
 
-    - name: 5. Install CocoaPods
-      run: |
-        cd ios/App
-        pod install
-
-    - name: 6. Build Xcode App
+    - name: 5. Build Xcode App
       run: |
         xcodebuild -workspace ios/App/App.xcworkspace \
                    -scheme App \
@@ -41,13 +36,13 @@ jobs:
                    CODE_SIGNING_REQUIRED=NO \
                    CODE_SIGNING_ALLOWED=NO
 
-    - name: 7. Package IPA
+    - name: 6. Package IPA
       run: |
         mkdir -p Payload
         mv ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
         zip -r App-Unsigned.ipa Payload
 
-    - name: 8. Upload Artifact
+    - name: 7. Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ios-app-build
