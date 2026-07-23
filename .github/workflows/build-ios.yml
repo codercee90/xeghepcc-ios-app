@@ -39,7 +39,7 @@ jobs:
           if [ ! -f "Podfile" ]; then
             pod init
           fi
-          pod install --repo-update
+          pod install
 
       # BƯỚC 8: Build Xcode
       - name: Build Xcode App
