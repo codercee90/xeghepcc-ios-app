@@ -36,6 +36,9 @@ jobs:
         run: |
           sudo gem install cocoapods
           cd ios/App
+          if [ ! -f "Podfile" ]; then
+            pod init
+          fi
           pod install --repo-update
 
       # BƯỚC 8: Build Xcode
