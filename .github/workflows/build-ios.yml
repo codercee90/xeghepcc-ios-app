@@ -20,8 +20,11 @@ jobs:
           node-version: 24
           cache: 'npm'
 
-      - name: Install NPM Dependencies
-        run: npm ci
+      - name: Install NPM Dependencies & Background Geolocation Plugin
+        run: |
+          npm ci
+          # Cài đặt plugin vị trí ngầm trực tiếp trên GitHub Runner
+          npm install @capacitor-community/background-geolocation --save
 
       - name: Build Web App (Bỏ qua nếu không có script)
         run: npm run build --if-present
@@ -29,9 +32,10 @@ jobs:
       - name: Capacitor Sync iOS
         run: |
           npx cap add ios || true
+          # Đồng bộ code Web + Plugin Native vừa cài vào thư mục iOS
           npx cap sync ios
 
-      # BƯỚC 7 TỐI ƯU: Cài CocoaPods & Chạy Pod Install
+      # BƯỚC CÀI COCOAPODS: Cập nhật Pods để tích hợp thư viện Swift của Plugin vừa cài
       - name: Install CocoaPods Dependencies
         run: |
           sudo gem install cocoapods
@@ -41,7 +45,7 @@ jobs:
           fi
           pod install
 
-      # BƯỚC 8: Build Xcode
+      # BƯỚC BUILD XCODE
       - name: Build Xcode App
         run: |
           xcodebuild -workspace ios/App/App.xcworkspace \
