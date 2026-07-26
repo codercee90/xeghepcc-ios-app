@@ -2,12 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CAPACITOR_DEBUG</key>
+	<key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>XeGhep.CC</string>
+	<string>XeGhep.CC</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -47,29 +47,43 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<!-- Quyền GPS -->
+
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Ứng dụng cần vị trí để xác định điểm đón/trả khách.</string>
+	<string>Ứng dụng cần vị trí để xác định điểm đón, trả khách và định vị vị trí của bạn trên bản đồ.</string>
+
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Ứng dụng tài xế cần vị trí liên tục kể cả khi tắt màn hình để cập nhật hành trình.</string>
+	<string>Ứng dụng tài xế cần truy cập vị trí liên tục kể cả khi tắt màn hình hoặc chuyển ứng dụng để cập nhật hành trình cho khách hàng.</string>
+
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Cập nhật vị trí tài xế liên tục trên bản đồ.</string>
-	<!-- Quyền truy cập Micro -->
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Ứng dụng cần sử dụng Micro để thu âm giọng nói của người dùng để gửi tin nhắn voice trong khung chat.</string>
-	<!-- Quyền Nhận diện giọng nói -->
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Ứng dụng cần nhận diện giọng nói để chuyển thành văn bản.</string>
-	<!-- Quyền chạy ngầm -->
+	<string>Ứng dụng cần vị trí liên tục để duy trì định vị tài xế trên bản đồ theo thời gian thực.</string>
+
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>PreciseLocation</key>
+		<string>Ứng dụng cần vị trí chính xác để dẫn đường và tính khoảng cách di chuyển thực tế.</string>
+	</dict>
+
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 		<string>remote-notification</string>
 	</array>
-	<!-- Cho phép load URL xeghep.cc -->
+
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ứng dụng cần sử dụng Micro để ghi âm và gửi tin nhắn thoại giữa tài xế và hành khách.</string>
+
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Ứng dụng cần nhận diện giọng nói để hỗ trợ nhập thông tin chuyến đi bằng giọng nói.</string>
+
+	<key>NSCameraUsageDescription</key>
+	<string>Ứng dụng cần mở Camera để chụp ảnh đại diện, bằng lái xe và căn cước công danh.</string>
+
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Ứng dụng cần truy cập thư viện ảnh để tải lên giấy tờ tài xế hoặc hình ảnh chuyến xe.</string>
+
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsArbitraryLoads</key>
+		<key>NSAllowsAllowsArbitraryLoadsInWebContent</key>
 		<true/>
 	</dict>
 </dict>
