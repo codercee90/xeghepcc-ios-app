@@ -8,8 +8,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
-        FirebaseApp.configure()
+        // Cấu hình an toàn: Kiểm tra file plist trong Bundle trước khi init
+        if let filePath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           let options = FirebaseOptions(contentsOfFile: filePath) {
+            FirebaseApp.configure(options: options)
+            print("[Firebase] Khởi tạo thành công!")
+        } else {
+            print("[Firebase] ERROR: Không tìm thấy file GoogleService-Info.plist trong Bundle app!")
+        }
+
         return true
     }
 
