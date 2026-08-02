@@ -8,14 +8,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Cấu hình an toàn: Kiểm tra file plist trong Bundle trước khi init
+        // 1. Chỉ gọi FirebaseConfigure nếu có file GoogleService-Info.plist
         if let filePath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            let options = FirebaseOptions(contentsOfFile: filePath) {
             FirebaseApp.configure(options: options)
-            print("[Firebase] Khởi tạo thành công!")
-        } else {
-            print("[Firebase] ERROR: Không tìm thấy file GoogleService-Info.plist trong Bundle app!")
         }
+        
+        // 2. Tắt tự động đăng ký Push ở tầng Native khi dùng chứng chỉ Sideload/3uTools
+        UIApplication.shared.unregisterForRemoteNotifications()
 
         return true
     }
