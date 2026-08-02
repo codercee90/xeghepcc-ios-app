@@ -20,26 +20,25 @@ jobs:
           node-version: 24
           cache: 'npm'
 
-      - name: Install NPM Dependencies & Background Geolocation Plugin
+      - name: Install NPM Dependencies & Plugins
         run: |
           npm ci
-          # Cài đặt plugin vị trí ngầm trực tiếp trên GitHub Runner
           npm install @capacitor-community/background-geolocation --save
           npm install @capacitor-firebase/messaging --save
 
-      - name: Build Web App (Bỏ qua nếu không có script)
+      - name: Build Web App
         run: npm run build --if-present
 
-      # BƯỚC MỚI: Tự động ghi file GoogleService-Info.plist từ GitHub Secrets
+      # 1. Tự động ghi file GoogleService-Info.plist từ GitHub Secrets
       - name: Create GoogleService-Info.plist
         run: |
           echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
 
-      - name: Capacitor Sync iOS
+      # 2. Đồng bộ Capacitor & Cài Pods chuẩn Static Framework (Giúp 3uTools Sign không lỗi dyld)
+      - name: Capacitor Sync & Install Pods
         run: |
           npx cap add ios || true
-          # Đồng bộ code Web + Plugin Native vừa cài vào thư mục iOS
-
+          
           # Cấu hình Podfile dùng static frameworks bắt buộc cho Firebase
           cat << 'EOF' > ios/App/Podfile
           platform :ios, '14.0'
@@ -51,18 +50,10 @@ jobs:
           EOF
 
           npx cap sync ios
-
-      # BƯỚC CÀI COCOAPODS: Cập nhật Pods để tích hợp thư viện Swift của Plugin vừa cài
-      - name: Install CocoaPods Dependencies
-        run: |
-          sudo gem install cocoapods
           cd ios/App
-          if [ ! -f "Podfile" ]; then
-            pod init
-          fi
-          pod install
+          pod install --repo-update
 
-      # BƯỚC BUILD XCODE
+      # 3. Build Xcode Binary (Cấu hình chuẩn cho Sideload / 3uTools)
       - name: Build Xcode App
         run: |
           xcodebuild -workspace ios/App/App.xcworkspace \
@@ -72,12 +63,18 @@ jobs:
                      -derivedDataPath build \
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_ALLOWED=NO
+                     CODE_SIGNING_ALLOWED=NO \
+                     DISABLE_EXTRA_APP_PLIST_ENTITLEMENTS=YES
 
-      - name: Create Unsigned IPA Package
+      # 4. Đóng gói IPA chuẩn tương thích 100% với 3uTools / AltStore
+      - name: Create Clean IPA Package
         run: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/App.app Payload/
+          
+          # Xóa các signature rác (nếu có) để 3uTools ký lại từ đầu sạch sẽ
+          rm -rf Payload/App.app/_CodeSignature
+          
           zip -r App-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
