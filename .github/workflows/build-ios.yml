@@ -34,13 +34,13 @@ jobs:
         run: |
           echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
 
-      # 2. Đồng bộ Capacitor (Chuẩn cho Capacitor 7 SPM)
+      # 2. Đồng bộ Capacitor 7
       - name: Capacitor Sync iOS
         run: |
           npx cap add ios || true
           npx cap sync ios
 
-      # 3. Build Xcode Binary (Trỏ trực tiếp vào .xcodeproj)
+      # 3. Build Xcode Binary
       - name: Build Xcode App
         run: |
           xcodebuild -project ios/App/App.xcodeproj \
@@ -53,13 +53,16 @@ jobs:
                      CODE_SIGNING_ALLOWED=NO \
                      DISABLE_EXTRA_APP_PLIST_ENTITLEMENTS=YES
 
-      # 4. Đóng gói IPA chuẩn tương thích 100% với 3uTools / AltStore
+      # 4. ĐÓNG GÓI IPA (INJECT TRỰC TIẾP FILE PLIST VÀO APP BUNDLE)
       - name: Create Clean IPA Package
         run: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/App.app Payload/
           
-          # Xóa signature rác để 3uTools ký lại từ đầu sạch sẽ
+          # 👈 ÉP COPY FILE PLIST TRỰC TIẾP VÀO BUNDLE NATIVE ĐỂ TRÁNH CRASH
+          cp ios/App/App/GoogleService-Info.plist Payload/App.app/GoogleService-Info.plist
+          
+          # Xóa signature rác để 3uTools ký lại từ đầu
           rm -rf Payload/App.app/_CodeSignature
           
           zip -r App-unsigned.ipa Payload
