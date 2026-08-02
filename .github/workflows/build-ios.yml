@@ -29,31 +29,21 @@ jobs:
       - name: Build Web App
         run: npm run build --if-present
 
-      # 1. Tự động ghi file GoogleService-Info.plist từ GitHub Secrets
+      # 1. Tạo file GoogleService-Info.plist từ GitHub Secrets
       - name: Create GoogleService-Info.plist
         run: |
           echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
 
-      # 2. Đồng bộ Capacitor chuẩn (Để Capacitor tự sinh Podfile/SPM đúng chuẩn)
+      # 2. Đồng bộ Capacitor (Chuẩn cho Capacitor 7 SPM)
       - name: Capacitor Sync iOS
         run: |
           npx cap add ios || true
           npx cap sync ios
 
-      # 3. Chèn cấu hình static linkage vào Podfile nếu dự án dùng Pods
-      - name: Configure Static Frameworks & Install Pods
-        run: |
-          cd ios/App
-          if [ -f "Podfile" ]; then
-            # Thêm dòng use_frameworks! :linkage => :static vào đầu Podfile nếu chưa có
-            sed -i '' '1s/^/use_frameworks! :linkage => :static\n/' Podfile || true
-            pod install --repo-update || true
-          fi
-
-      # 4. Build Xcode Binary (Cấu hình chuẩn cho Sideload / 3uTools)
+      # 3. Build Xcode Binary (Trỏ trực tiếp vào .xcodeproj)
       - name: Build Xcode App
         run: |
-          xcodebuild -workspace ios/App/App.xcworkspace \
+          xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
@@ -63,7 +53,7 @@ jobs:
                      CODE_SIGNING_ALLOWED=NO \
                      DISABLE_EXTRA_APP_PLIST_ENTITLEMENTS=YES
 
-      # 5. Đóng gói IPA chuẩn tương thích 100% với 3uTools / AltStore
+      # 4. Đóng gói IPA chuẩn tương thích 100% với 3uTools / AltStore
       - name: Create Clean IPA Package
         run: |
           mkdir -p Payload
