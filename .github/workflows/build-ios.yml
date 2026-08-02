@@ -30,6 +30,11 @@ jobs:
       - name: Build Web App (Bỏ qua nếu không có script)
         run: npm run build --if-present
 
+      # BƯỚC MỚI: Tự động ghi file GoogleService-Info.plist từ GitHub Secrets
+      - name: Create GoogleService-Info.plist
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
+
       - name: Capacitor Sync iOS
         run: |
           npx cap add ios || true
