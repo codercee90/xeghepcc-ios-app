@@ -25,6 +25,7 @@ jobs:
           npm ci
           # Cài đặt plugin vị trí ngầm trực tiếp trên GitHub Runner
           npm install @capacitor-community/background-geolocation --save
+          npm install @capacitor-firebase/messaging --save
 
       - name: Build Web App (Bỏ qua nếu không có script)
         run: npm run build --if-present
