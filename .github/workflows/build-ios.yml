@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20  # Khuyên dùng Node 20 LTS để ổn định nhất với Capacitor CLI
+          node-version: 24  # Khuyên dùng Node 20 LTS để ổn định nhất với Capacitor CLI
           cache: 'npm'
 
       - name: Install NPM Dependencies & Plugins
