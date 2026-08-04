@@ -24,20 +24,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         UIApplication.shared.unregisterForRemoteNotifications()
 		
 		// 3. Đoạn code lắng nghe mạng
-        monitor.pathUpdateHandler = { [weak self] path in
-            if path.status == .satisfied {
-                DispatchQueue.main.async {
-                    if self?.isFirstLoad == false {
-                        // Lấy rootViewController (chính là Capacitor Bridge) để reload webview
-                        if let vc = self?.window?.rootViewController as? CAPBridgeViewController {
-                            vc.webView?.reload()
-                        }
-                    }
-                    self?.isFirstLoad = false
-                }
-            }
-        }
-        monitor.start(queue: queue)
+		monitor.pathUpdateHandler = { [weak self] path in
+		    if path.status == .satisfied {
+		        DispatchQueue.main.async {
+		            if self?.isFirstLoad == false {
+		                if let vc = self?.window?.rootViewController as? CAPBridgeViewController {
+		                    // Nếu webView đang có URL hiện tại, dùng URL đó. Nếu không/hoặc bị lỗi, load lại serverURL gốc
+		                    if let currentURL = vc.webView?.url, currentURL.absoluteString != "about:blank" {
+		                        vc.webView?.reload()
+		                    } else if let serverURL = vc.serverUrl {
+		                        vc.webView?.load(URLRequest(url: serverURL))
+		                    }
+		                }
+		            }
+		            self?.isFirstLoad = false
+		        }
+		    }
+		}
+		monitor.start(queue: queue)
 
         return true
     }
