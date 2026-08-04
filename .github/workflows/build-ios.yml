@@ -22,7 +22,7 @@ jobs:
 
       - name: Install NPM Dependencies & Plugins
         run: |
-          npm ci
+          npm install
           npm install @capacitor-community/background-geolocation --save
           npm install @capacitor-firebase/messaging --save
 
