@@ -8,7 +8,7 @@
       "backgroundTitle": "XeGhep.CC đang chạy ngầm"
     },
     "SplashScreen": {
-      "launchShowDuration": 2500,
+      "launchShowDuration": 1500,
       "launchAutoHide": true,
       "backgroundColor": "#F2F2F7",
       "showSpinner": false,
