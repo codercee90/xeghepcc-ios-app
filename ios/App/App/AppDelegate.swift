@@ -1,7 +1,6 @@
 import UIKit
 import Capacitor
 import FirebaseCore
-import Network
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -22,24 +21,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         
         // 2. Tắt tự động đăng ký Push ở tầng Native khi dùng chứng chỉ Sideload/3uTools
         UIApplication.shared.unregisterForRemoteNotifications()
-		
-		// 3. Xử lý tải lại trang cho URL động
-		monitor.pathUpdateHandler = { [weak self] path in
-		    if path.status == .satisfied {
-		        DispatchQueue.main.async {
-		            if self?.isFirstLoad == false {
-		                // Ép iOS hủy WebView hỏng và vẽ lại RootViewController mới hoàn toàn
-		                let storyboard = UIStoryboard(name: "Main", bundle: nil)
-		                if let newVC = storyboard.instantiateInitialViewController() {
-		                    self?.window?.rootViewController = newVC
-		                    self?.window?.makeKeyAndVisible()
-		                }
-		            }
-		            self?.isFirstLoad = false
-		        }
-		    }
-		}
-		monitor.start(queue: queue)
 
         return true
     }
