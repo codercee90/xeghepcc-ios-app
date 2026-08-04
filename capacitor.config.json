@@ -21,6 +21,7 @@
   },
   "server": {
     "url": "https://www.xeghep.cc/native.php?fromNativeApp=1&fromApp=iosCapacitor",
-    "cleartext": true
+    "cleartext": true,
+    "errorPath": "offline.html"
   }
 }
