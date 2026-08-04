@@ -28,17 +28,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 		    if path.status == .satisfied {
 		        DispatchQueue.main.async {
 		            if self?.isFirstLoad == false {
-		                // Ép giao diện khôi phục lại bridge Capacitor nguyên bản
 		                if let window = self?.window,
 		                   let vc = window.rootViewController as? CAPBridgeViewController {
 		                    
-		                    // Kiểm tra nếu webview hỏng/ở trang trắng
-		                    let currentPath = vc.webView?.url?.absoluteString ?? ""
-		                    if currentPath.contains("about:blank") || currentPath.isEmpty {
-		                        // Khởi động lại Bridge Capacitor để load lại từ main index
-		                        vc.load() 
-		                    } else {
-		                        vc.webView?.reload()
+		                    // Nếu đã có webView và URL hợp lệ (không phải trang trắng)
+		                    if let webView = vc.webView, let url = webView.url, url.absoluteString != "about:blank" {
+		                        webView.reload()
+		                    } else if let webView = vc.webView {
+		                        // Nếu dính trang trắng about:blank hoặc lỗi kết nối ban đầu
+		                        // Tải lại bằng URL gốc từ Bridge
+		                        if let initialURL = vc.bridge?.config.serverURL {
+		                            webView.load(URLRequest(url: initialURL))
+		                        } else {
+		                            webView.reload()
+		                        }
 		                    }
 		                }
 		            }
