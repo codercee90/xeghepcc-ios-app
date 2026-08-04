@@ -6,6 +6,14 @@
     "BackgroundGeolocation": {
       "backgroundMessage": "Đang cập nhật vị trí hành trình cho khách...",
       "backgroundTitle": "XeGhep.CC đang chạy ngầm"
+    },
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#F2F2F7",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP",
+      "splashFullScreen": true,
+      "splashImmersive": true
     }
   },
   "server": {
