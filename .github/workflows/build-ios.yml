@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20  # Khuyên dùng Node 20 LTS để ổn định nhất với Capacitor CLI
           cache: 'npm'
 
       - name: Install NPM Dependencies & Plugins
@@ -33,18 +33,20 @@ jobs:
       # 1. Tạo file GoogleService-Info.plist từ GitHub Secrets
       - name: Create GoogleService-Info.plist
         run: |
+          mkdir -p ios/App/App
           echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
 
-      # 2. Đồng bộ Capacitor 7
-      - name: Capacitor Sync iOS
+      # 2. Đồng bộ Capacitor & Cài đặt Native Pods (ĐÃ SỬA LỖI THIẾU PODS)
+      - name: Capacitor Sync iOS & Pod Install
         run: |
           npx cap add ios || true
           npx cap sync ios
+          cd ios/App && pod install --repo-update
 
-      # 3. Build Xcode Binary
+      # 3. Build Xcode Binary (ĐÃ SỬA SANG DÙNG .xcworkspace)
       - name: Build Xcode App
         run: |
-          xcodebuild -project ios/App/App.xcodeproj \
+          xcodebuild -workspace ios/App/App.xcworkspace \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
@@ -60,7 +62,7 @@ jobs:
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/App.app Payload/
           
-          # 👈 ÉP COPY FILE PLIST TRỰC TIẾP VÀO BUNDLE NATIVE ĐỂ TRÁNH CRASH
+          # ÉP COPY FILE PLIST TRỰC TIẾP VÀO BUNDLE NATIVE
           cp ios/App/App/GoogleService-Info.plist Payload/App.app/GoogleService-Info.plist
           
           # Xóa signature rác để 3uTools ký lại từ đầu
