@@ -1,11 +1,17 @@
 import UIKit
 import Capacitor
 import FirebaseCore
+import Network
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
+	
+	// 2. Thêm các biến theo dõi mạng
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "NetworkMonitor")
+    private var isFirstLoad = true
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // 1. Chỉ gọi FirebaseConfigure nếu có file GoogleService-Info.plist
@@ -16,6 +22,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         
         // 2. Tắt tự động đăng ký Push ở tầng Native khi dùng chứng chỉ Sideload/3uTools
         UIApplication.shared.unregisterForRemoteNotifications()
+		
+		// 3. Đoạn code lắng nghe mạng
+        monitor.pathUpdateHandler = { [weak self] path in
+            if path.status == .satisfied {
+                DispatchQueue.main.async {
+                    if self?.isFirstLoad == false {
+                        // Lấy rootViewController (chính là Capacitor Bridge) để reload webview
+                        if let vc = self?.window?.rootViewController as? CAPBridgeViewController {
+                            vc.webView?.reload()
+                        }
+                    }
+                    self?.isFirstLoad = false
+                }
+            }
+        }
+        monitor.start(queue: queue)
 
         return true
     }
