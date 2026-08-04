@@ -23,25 +23,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // 2. Tắt tự động đăng ký Push ở tầng Native khi dùng chứng chỉ Sideload/3uTools
         UIApplication.shared.unregisterForRemoteNotifications()
 		
-		// 3. Đoạn code lắng nghe mạng khôi phục WebView
+		// 3. Đoạn code lắng nghe mạng cho URL Động
 		monitor.pathUpdateHandler = { [weak self] path in
 		    if path.status == .satisfied {
 		        DispatchQueue.main.async {
 		            if self?.isFirstLoad == false {
-		                if let window = self?.window,
-		                   let vc = window.rootViewController as? CAPBridgeViewController {
-		                    
-		                    // Nếu đã có webView và URL hợp lệ (không phải trang trắng)
-		                    if let webView = vc.webView, let url = webView.url, url.absoluteString != "about:blank" {
+		                // Đợi 1.2 giây để iOS mở hoàn toàn luồng Internet sau khi bấm cấp quyền
+		                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+		                    guard let window = self?.window,
+		                          let vc = window.rootViewController as? CAPBridgeViewController,
+		                          let webView = vc.webView else { return }
+		
+		                    // Lấy lại URL động từ cấu hình Capacitor Server
+		                    if let dynamicURL = vc.bridge?.config.serverURL {
+		                        // Tạo request mới và ép WebView nạp lại URL động từ đầu
+		                        let request = URLRequest(url: dynamicURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30.0)
+		                        webView.load(request)
+		                    } else if let currentURL = webView.url, currentURL.absoluteString != "about:blank" {
+		                        // Trường hợp backup nếu đã có URL hiện tại
 		                        webView.reload()
-		                    } else if let webView = vc.webView {
-		                        // Nếu dính trang trắng about:blank hoặc lỗi kết nối ban đầu
-		                        // Tải lại bằng URL gốc từ Bridge
-		                        if let initialURL = vc.bridge?.config.serverURL {
-		                            webView.load(URLRequest(url: initialURL))
-		                        } else {
-		                            webView.reload()
-		                        }
 		                    }
 		                }
 		            }
