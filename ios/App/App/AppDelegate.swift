@@ -28,18 +28,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 		    if path.status == .satisfied {
 		        DispatchQueue.main.async {
 		            if self?.isFirstLoad == false {
-		                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-		                    guard let window = self?.window,
-		                          let vc = window.rootViewController as? CAPBridgeViewController,
-		                          let webView = vc.webView else { return }
-		
-		                    // Bỏ dấu '?' ở serverURL
-		                    if let serverURL = vc.bridge?.config.serverURL.absoluteString {
-		                        let jsCode = "window.location.href = '\(serverURL)';"
-		                        webView.evaluateJavaScript(jsCode, completionHandler: nil)
-		                    } else {
-		                        webView.reload()
-		                    }
+		                // Ép iOS hủy WebView hỏng và vẽ lại RootViewController mới hoàn toàn
+		                let storyboard = UIStoryboard(name: "Main", bundle: nil)
+		                if let newVC = storyboard.instantiateInitialViewController() {
+		                    self?.window?.rootViewController = newVC
+		                    self?.window?.makeKeyAndVisible()
 		                }
 		            }
 		            self?.isFirstLoad = false
