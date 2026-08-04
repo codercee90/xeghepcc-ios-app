@@ -23,23 +23,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // 2. Tắt tự động đăng ký Push ở tầng Native khi dùng chứng chỉ Sideload/3uTools
         UIApplication.shared.unregisterForRemoteNotifications()
 		
-		// 3. Đoạn code lắng nghe mạng
+		// 3. Đoạn code lắng nghe mạng khôi phục WebView
 		monitor.pathUpdateHandler = { [weak self] path in
 		    if path.status == .satisfied {
 		        DispatchQueue.main.async {
 		            if self?.isFirstLoad == false {
-		                if let vc = self?.window?.rootViewController as? CAPBridgeViewController {
-		                    // Nếu webView có URL, ưu tiên reload
-		                    if let url = vc.webView?.url, url.absoluteString != "about:blank" {
-		                        vc.webView?.reload()
+		                // Ép giao diện khôi phục lại bridge Capacitor nguyên bản
+		                if let window = self?.window,
+		                   let vc = window.rootViewController as? CAPBridgeViewController {
+		                    
+		                    // Kiểm tra nếu webview hỏng/ở trang trắng
+		                    let currentPath = vc.webView?.url?.absoluteString ?? ""
+		                    if currentPath.contains("about:blank") || currentPath.isEmpty {
+		                        // Khởi động lại Bridge Capacitor để load lại từ main index
+		                        vc.load() 
 		                    } else {
-		                        // Nếu đang bị dính trang trắng about:blank, lấy serverURL chuẩn hoặc gọi bridge reload
-		                        if let serverURL = vc.bridge?.config.serverURL {
-		                            vc.webView?.load(URLRequest(url: serverURL))
-		                        } else {
-		                            // Backup: load lại từ route gốc của Capacitor
-		                            vc.webView?.reload()
-		                        }
+		                        vc.webView?.reload()
 		                    }
 		                }
 		            }
