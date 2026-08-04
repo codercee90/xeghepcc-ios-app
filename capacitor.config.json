@@ -8,11 +8,12 @@
       "backgroundTitle": "XeGhep.CC đang chạy ngầm"
     },
     "SplashScreen": {
-      "launchShowDuration": 2000,
-      "launchAutoHide": false,
+      "launchShowDuration": 2500,
+      "launchAutoHide": true,
       "backgroundColor": "#F2F2F7",
       "showSpinner": false,
       "androidScaleType": "CENTER_CROP",
+      "androidSplashResourceName": "splash",
       "iosScaleType": "small",
       "splashFullScreen": false,
       "splashImmersive": false
