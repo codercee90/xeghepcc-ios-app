@@ -33,9 +33,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 		                          let vc = window.rootViewController as? CAPBridgeViewController,
 		                          let webView = vc.webView else { return }
 		
-		                    // Đổi sang lấy serverURL từ bridge instance
-		                    if let serverURL = vc.bridge?.config.serverURL?.absoluteString {
-		                        // Bơm đoạn JavaScript trực tiếp vào WebView để bắt buộc trình duyệt chuyển hướng
+		                    // Bỏ dấu '?' ở serverURL
+		                    if let serverURL = vc.bridge?.config.serverURL.absoluteString {
 		                        let jsCode = "window.location.href = '\(serverURL)';"
 		                        webView.evaluateJavaScript(jsCode, completionHandler: nil)
 		                    } else {
