@@ -29,17 +29,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 		        DispatchQueue.main.async {
 		            if self?.isFirstLoad == false {
 		                if let vc = self?.window?.rootViewController as? CAPBridgeViewController {
-		                    // Kiểm tra nếu đang bị văng ra trang trắng about:blank
+		                    // Nếu webView có URL, ưu tiên reload
 		                    if let url = vc.webView?.url, url.absoluteString != "about:blank" {
 		                        vc.webView?.reload()
 		                    } else {
-		                        // Nếu đang ở trang trắng, đợi 0.5s rồi reload lại bridge gốc của Capacitor
-		                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-		                            if let serverURL = vc.bridge?.config.serverUrl {
-		                                vc.webView?.load(URLRequest(url: serverURL))
-		                            } else {
-		                                vc.webView?.reload()
-		                            }
+		                        // Nếu đang bị dính trang trắng about:blank, lấy serverURL chuẩn hoặc gọi bridge reload
+		                        if let serverURL = vc.bridge?.config.serverURL {
+		                            vc.webView?.load(URLRequest(url: serverURL))
+		                        } else {
+		                            // Backup: load lại từ route gốc của Capacitor
+		                            vc.webView?.reload()
 		                        }
 		                    }
 		                }
