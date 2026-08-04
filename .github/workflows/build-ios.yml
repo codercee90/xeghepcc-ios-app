@@ -25,6 +25,7 @@ jobs:
           npm install
           npm install @capacitor-community/background-geolocation --save
           npm install @capacitor-firebase/messaging --save
+          npm install @capacitor/network --save
 
       - name: Build Web App
         run: npm run build --if-present
