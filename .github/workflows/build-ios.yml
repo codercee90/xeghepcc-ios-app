@@ -37,16 +37,15 @@ jobs:
           echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
 
       # 2. Đồng bộ Capacitor & Cài đặt Native Pods (ĐÃ SỬA LỖI THIẾU PODS)
-      - name: Capacitor Sync iOS & Pod Install
+      - name: Capacitor Sync iOS
         run: |
           npx cap add ios || true
           npx cap sync ios
-          cd ios/App && pod install --repo-update
 
       # 3. Build Xcode Binary (ĐÃ SỬA SANG DÙNG .xcworkspace)
       - name: Build Xcode App
         run: |
-          xcodebuild -workspace ios/App/App.xcworkspace \
+          xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
