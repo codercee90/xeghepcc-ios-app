@@ -12,6 +12,7 @@
       "backgroundColor": "#F2F2F7",
       "showSpinner": false,
       "androidScaleType": "CENTER_CROP",
+      "iosScaleType": "small",
       "splashFullScreen": true,
       "splashImmersive": true
     }
