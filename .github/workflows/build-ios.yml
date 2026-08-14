@@ -74,3 +74,70 @@ jobs:
           name: ios-build-unsigned
           path: App-unsigned.ipa
           retention-days: 7
+
+      # =========================================================================
+      # 5. CÀI ĐẶT CERTIFICATE (.p12) VÀ PROVISIONING PROFILE VÀO MACOS RUNNER
+      # =========================================================================
+      - name: Install Certificate and Provisioning Profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/embedded.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Giải mã file từ Base64
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > $PP_PATH
+
+          # Tạo Keychain tạm
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 3600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import Cert .p12 vào Keychain
+          security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
+
+      # =========================================================================
+      # 6. KÝ LẠI FILE IPA (RE-SIGN IPA)
+      # =========================================================================
+      - name: Resign IPA File
+        run: |
+          # Giải nén IPA cũ
+          unzip -q App-unsigned.ipa -d resigned_temp
+          
+          # Đưa Provisioning Profile mới vào trong app
+          cp $RUNNER_TEMP/embedded.mobileprovision resigned_temp/Payload/App.app/embedded.mobileprovision
+
+          # Tìm tên Tên Tên Chứng Chỉ Distribution vừa import trong Keychain
+          IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -n 1 | awk -F '"' '{print $2}')
+          
+          # Nếu không tìm thấy tên Distribution, lấy chứng chỉ ký code bất kỳ trong keychain vừa tạo
+          if [ -z "$IDENTITY" ]; then
+            IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | head -n 1 | awk -F '"' '{print $2}')
+          fi
+
+          echo "Signing with Identity: $IDENTITY"
+
+          # Ký lại toàn bộ gói App
+          /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db resigned_temp/Payload/App.app
+
+          # Nén lại thành file IPA hoàn chỉnh
+          cd resigned_temp
+          zip -qr ../App-signed.ipa Payload
+          cd ..
+
+      # =========================================================================
+      # 7. TẢI FILE IPA ĐÃ KÝ (SIGNED) LÊN ARTIFACTS ĐỂ DOWNLOAD
+      # =========================================================================
+      - name: Upload Signed IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-signed
+          path: App-signed.ipa
+          retention-days: 7
