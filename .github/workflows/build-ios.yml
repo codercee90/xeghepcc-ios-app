@@ -110,7 +110,10 @@ jobs:
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # 1. Trích xuất thông tin từ Provisioning Profile
+          # 1. Set Keychain tạm làm Keychain mặc định cho session này
+          security default-keychain -s $KEYCHAIN_PATH
+
+          # 2. Trích xuất thông tin từ Provisioning Profile
           security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
           TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" $RUNNER_TEMP/provision.plist)
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" $RUNNER_TEMP/provision.plist)
@@ -120,34 +123,22 @@ jobs:
           echo "Extracted Profile Name: $PROFILE_NAME"
           echo "Extracted Bundle ID: $BUNDLE_ID"
 
-          # 2. LẤY CHÍNH XÁC TÊN CERTIFICATE TỪ KEYCHAIN VỪA IMPORT
-          CERT_NAME=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -E "Apple Distribution|iOS Distribution" | head -n 1 | awk -F '"' '{print $2}')
-          
-          # Nếu không tìm thấy bằng grep, lấy tên identity đầu tiên trong keychain
-          if [ -z "$CERT_NAME" ]; then
-            CERT_NAME="Apple Distribution"
-          fi
-
-          echo "Using Exact Signing Certificate: $CERT_NAME"
-
-          # 3. Tạo ExportOptions.plist ghi rõ signingCertificate chính xác
+          # 3. Tạo ExportOptions.plist chuẩn App Store Connect thế hệ mới
           cat <<EOF > $RUNNER_TEMP/ExportOptions.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
               <key>method</key>
-              <string>app-store</string>
+              <string>app-store-connect</string>
               <key>teamID</key>
               <string>$TEAM_ID</string>
               <key>uploadSymbols</key>
               <true/>
-              <key>uploadBitcode</key>
-              <false/>
               <key>signingStyle</key>
               <string>manual</string>
               <key>signingCertificate</key>
-              <string>$CERT_NAME</string>
+              <string>Apple Distribution</string>
               <key>provisioningProfiles</key>
               <dict>
                   <key>$BUNDLE_ID</key>
