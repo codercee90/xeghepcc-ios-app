@@ -84,7 +84,7 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 5. BUILD XCODE ARCHIVE VÀ TỰ ĐỘNG KÝ TRỰC TIẾP TỪ XCODE
+      # 5. BUILD XCODE ARCHIVE (BỎ QUA KÝ CÁC GÓI PHỤ SPM)
       # =========================================================================
       - name: Build Xcode App Archive
         run: |
@@ -96,28 +96,48 @@ jobs:
                      -archivePath build/App.xcarchive \
                      archive \
                      CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGN_IDENTITY="" \
                      PROVISIONING_PROFILE_SPECIFIER=""
 
       # =========================================================================
-      # 6. ĐÓNG GÓI CHUẨN IPA TỪ ARCHIVE (KHÔNG DÙNG CODESIGN THỦ CÔNG)
+      # 6. ĐÓNG GÓI VÀ KÝ DEEP TOÀN BỘ APP & FRAMEWORKS CHUẨN ĐỒNG BỘ
       # =========================================================================
       - name: Create Signed IPA Package
         run: |
           mkdir -p Payload
           cp -r build/App.xcarchive/Products/Applications/App.app Payload/
           
-          # Inject GoogleService-Info.plist nếu cần
-          cp ios/App/App/GoogleService-Info.plist Payload/App.app/GoogleService-Info.plist
-          
-          # Đưa Provisioning Profile chuẩn vào bundle app
-          cp $RUNNER_TEMP/embedded.mobileprovision Payload/App.app/embedded.mobileprovision
-          
-          # Đóng gói thành file IPA hoàn chỉnh
+          APP_PATH="Payload/App.app"
+
+          # 1. Chèn GoogleService-Info.plist và Provisioning Profile chuẩn vào bundle
+          cp ios/App/App/GoogleService-Info.plist "$APP_PATH/GoogleService-Info.plist"
+          cp $RUNNER_TEMP/embedded.mobileprovision "$APP_PATH/embedded.mobileprovision"
+
+          # 2. Trích xuất chính xác Entitlements từ Provisioning Profile
+          security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
+          /usr/libexec/PlistBuddy -x -c 'Print:Entitlements' $RUNNER_TEMP/provision.plist > $RUNNER_TEMP/entitlements.plist
+
+          # 3. Lấy tên Chứng chỉ Distribution trong Keychain
+          IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -n 1 | awk -F '"' '{print $2}')
+          if [ -z "$IDENTITY" ]; then
+            IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | head -n 1 | awk -F '"' '{print $2}')
+          fi
+
+          echo "Signing with Identity: $IDENTITY"
+
+          # 4. Ký Deep lại toàn bộ App Bundle (Fix triệt để chữ ký Capacitor & Cordova)
+          /usr/bin/codesign --force --deep --sign "$IDENTITY" \
+            --entitlements $RUNNER_TEMP/entitlements.plist \
+            --keychain $RUNNER_TEMP/app-signing.keychain-db \
+            "$APP_PATH"
+
+          # 5. Nén lại thành file IPA
           zip -qr App-signed.ipa Payload
 
       # =========================================================================
-      # 7. UPLOAD IPA TRỰC TIẾP LÊN TESTFLIGHT VỚI ALTOOL
+      # 7. UPLOAD TRỰC TIẾP LÊN TESTFLIGHT VỚI ALTOOL
       # =========================================================================
       - name: Upload IPA to TestFlight
         env:
