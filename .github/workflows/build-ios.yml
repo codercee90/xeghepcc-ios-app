@@ -123,11 +123,10 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 6. KÝ LẠI FILE IPA (TỰ ĐỘNG BÓC TÁCH ENTITLEMENTS CHUẨN TỪ MOBILEPROVISION)
+      # 6. KÝ LẠI FILE IPA (FIX CHUẨN ĐA FRAMEWORK CORDOVA / CAPACITOR)
       # =========================================================================
       - name: Resign IPA File
         run: |
-          # Giải nén IPA cũ
           unzip -q App-unsigned.ipa -d resigned_temp
           APP_PATH="resigned_temp/Payload/App.app"
           
@@ -147,26 +146,33 @@ jobs:
 
           echo "Signing with Identity: $IDENTITY"
 
-          # 4. KÝ TẤT CẢ FRAMEWORKS VÀ DYLIB (SỬ DỤNG DEEP SIGN VÀ PRESERVE METADATA)
+          # 4. XÓA TẤT CẢ CHỮ KÝ CŨ CỦA FRAMEWORKS VÀ APPS ĐỂ TRÁNH XUNG ĐỘT
+          find "$APP_PATH" -name "_CodeSignature" -exec rm -rf {} + 2>/dev/null || true
+
+          # 5. KÝ TẤT CẢ MỌI FRAMEWORK BÊN TRONG BẰNG ĐÚNG CHỨNG CHỈ VÀ ENTITLEMENTS
           if [ -d "$APP_PATH/Frameworks" ]; then
-            find "$APP_PATH/Frameworks" -type f \( -name "*.dylib" -o -name "Capacitor" -o -name "Cordova" \) -o -name "*.framework" | while read framework; do
-              echo "Signing Framework/Dylib: $framework"
-              /usr/bin/codesign --force --deep --sign "$IDENTITY" --preserve-metadata=identifier,entitlements,flags --keychain $RUNNER_TEMP/app-signing.keychain-db "$framework"
+            for fw in "$APP_PATH/Frameworks"/*; do
+              if [ -d "$fw" ] || [ -f "$fw" ]; then
+                echo "Re-signing Framework: $fw"
+                /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db "$fw"
+              fi
             done
           fi
 
-          # 5. Ký tất cả App Extensions (nếu có PlugIns)
+          # 6. KÝ TẤT CẢ PLUGINS / EXTENSIONS (NẾU CÓ)
           if [ -d "$APP_PATH/PlugIns" ]; then
-            find "$APP_PATH/PlugIns" -mindepth 1 -maxdepth 1 | while read plugin; do
-              echo "Signing App Extension: $plugin"
-              /usr/bin/codesign --force --deep --sign "$IDENTITY" --entitlements "$ENTITLEMENTS_FILE" --keychain $RUNNER_TEMP/app-signing.keychain-db "$plugin"
+            for plugin in "$APP_PATH/PlugIns"/*; do
+              if [ -d "$plugin" ]; then
+                echo "Re-signing Plugin: $plugin"
+                /usr/bin/codesign --force --sign "$IDENTITY" --entitlements "$ENTITLEMENTS_FILE" --keychain $RUNNER_TEMP/app-signing.keychain-db "$plugin"
+              fi
             done
           fi
 
-          # 6. Ký lại toàn bộ gói App chính
-          /usr/bin/codesign --force --deep --sign "$IDENTITY" --entitlements "$ENTITLEMENTS_FILE" --keychain $RUNNER_TEMP/app-signing.keychain-db "$APP_PATH"
+          # 7. KÝ LẠI TOÀN BỘ BUNDLE APP CHÍNH (BƯỚC CUỐI CÙNG)
+          /usr/bin/codesign --force --sign "$IDENTITY" --entitlements "$ENTITLEMENTS_FILE" --keychain $RUNNER_TEMP/app-signing.keychain-db "$APP_PATH"
 
-          # Nén lại thành file IPA hoàn chỉnh
+          # Nén lại thành file IPA
           cd resigned_temp
           zip -qr ../App-signed.ipa Payload
           cd ..
