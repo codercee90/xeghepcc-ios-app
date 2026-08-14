@@ -41,6 +41,19 @@ jobs:
           npx cap add ios || true
           npx cap sync ios
 
+      # =========================================================================
+      # TỰ ĐỘNG CẬP NHẬT VERSION VÀ BUILD NUMBER
+      # =========================================================================
+      - name: Update Version and Build Number
+        run: |
+          cd ios/App
+          # Đổi số Version hiển thị cho người dùng (Thay "1.0.1" thành phiên bản bạn muốn)
+          xcrun agvtool new-marketing-version "1.1"
+          
+          # Tự động gán số Build Number theo số lần chạy workflow trên GitHub (1, 2, 3,...)
+          xcrun agvtool new-version -all "${{ github.run_number }}"
+          cd ../..
+
       # 3. Build Xcode Binary (ĐÃ SỬA SANG DÙNG .xcworkspace)
       - name: Build Xcode App
         run: |
