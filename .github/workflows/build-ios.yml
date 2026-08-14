@@ -35,7 +35,7 @@ jobs:
           mkdir -p ios/App/App
           echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
 
-      # 2. Đồng bộ Capacitor & Cài đặt Native Pods (ĐÃ SỬA LỖI THIẾU PODS)
+      # 2. Đồng bộ Capacitor & Cài đặt Native Pods
       - name: Capacitor Sync iOS
         run: |
           npx cap add ios || true
@@ -48,13 +48,13 @@ jobs:
         run: |
           cd ios/App
           # Đổi số Version hiển thị cho người dùng (Thay "1.0.1" thành phiên bản bạn muốn)
-          xcrun agvtool new-marketing-version "1.3"
+          xcrun agvtool new-marketing-version "1.5"
           
           # Tự động gán số Build Number theo số lần chạy workflow trên GitHub (1, 2, 3,...)
           xcrun agvtool new-version -all "${{ github.run_number }}"
           cd ../..
 
-      # 3. Build Xcode Binary (ĐÃ SỬA SANG DÙNG .xcworkspace)
+      # 3. Build Xcode Binary
       - name: Build Xcode App
         run: |
           xcodebuild -project ios/App/App.xcodeproj \
@@ -76,7 +76,7 @@ jobs:
           # ÉP COPY FILE PLIST TRỰC TIẾP VÀO BUNDLE NATIVE
           cp ios/App/App/GoogleService-Info.plist Payload/App.app/GoogleService-Info.plist
           
-          # Xóa signature rác để 3uTools ký lại từ đầu
+          # Xóa signature rác để 3uTools/codesign ký lại từ đầu
           rm -rf Payload/App.app/_CodeSignature
           
           zip -r App-unsigned.ipa Payload
@@ -117,41 +117,48 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 6. KÝ LẠI FILE IPA (ĐÃ SỬA: BỔ SUNG TRÍCH XUẤT VÀ NHÚNG ENTITLEMENTS)
+      # 6. KÝ LẠI FILE IPA (TỰ ĐỘNG BÓC TÁCH ENTITLEMENTS CHUẨN TỪ MOBILEPROVISION)
       # =========================================================================
       - name: Resign IPA File
         run: |
           # Giải nén IPA cũ
           unzip -q App-unsigned.ipa -d resigned_temp
+          APP_PATH="resigned_temp/Payload/App.app"
           
-          # Đưa Provisioning Profile mới vào trong app
-          cp $RUNNER_TEMP/embedded.mobileprovision resigned_temp/Payload/App.app/embedded.mobileprovision
+          # 1. Đưa Provisioning Profile mới vào trong app
+          cp $RUNNER_TEMP/embedded.mobileprovision "$APP_PATH/embedded.mobileprovision"
 
-          # Trích xuất Entitlements từ Provisioning Profile
+          # 2. Trích xuất chính xác Entitlements đầy đủ từ Provisioning Profile
           security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
           /usr/libexec/PlistBuddy -x -c 'Print:Entitlements' $RUNNER_TEMP/provision.plist > $RUNNER_TEMP/entitlements.plist
+          ENTITLEMENTS_FILE="$RUNNER_TEMP/entitlements.plist"
 
-          # Tìm tên Chứng Chỉ Distribution vừa import trong Keychain
+          # 3. Tìm tên Chứng Chỉ Distribution trong Keychain
           IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -n 1 | awk -F '"' '{print $2}')
-          
           if [ -z "$IDENTITY" ]; then
             IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | head -n 1 | awk -F '"' '{print $2}')
           fi
 
           echo "Signing with Identity: $IDENTITY"
 
-          # 1. Ký tất cả các Frameworks con bên trong (như Capacitor.framework, Cordova.framework,...)
-          if [ -d "resigned_temp/Payload/App.app/Frameworks" ]; then
-            for framework in resigned_temp/Payload/App.app/Frameworks/*; do
-              if [ -d "$framework" ] || [ -f "$framework" ]; then
-                echo "Signing Framework: $framework"
-                /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db "$framework"
-              fi
+          # 4. Ký tất cả các Frameworks/SPM con bên trong
+          if [ -d "$APP_PATH/Frameworks" ]; then
+            find "$APP_PATH/Frameworks" -mindepth 1 -maxdepth 1 | while read framework; do
+              echo "Signing Framework: $framework"
+              /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db "$framework"
             done
           fi
 
-          # 2. Ký lại toàn bộ gói App chính KÈM THEO FILE ENTITLEMENTS
-          /usr/bin/codesign --force --sign "$IDENTITY" --entitlements $RUNNER_TEMP/entitlements.plist --keychain $RUNNER_TEMP/app-signing.keychain-db resigned_temp/Payload/App.app
+          # 5. Ký tất cả App Extensions (nếu có PlugIns)
+          if [ -d "$APP_PATH/PlugIns" ]; then
+            find "$APP_PATH/PlugIns" -mindepth 1 -maxdepth 1 | while read plugin; do
+              echo "Signing App Extension: $plugin"
+              /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db "$plugin"
+            done
+          fi
+
+          # 6. Ký lại toàn bộ gói App chính KÈM ENTITLEMENTS ĐẦY ĐỦ
+          /usr/bin/codesign --force --sign "$IDENTITY" --entitlements "$ENTITLEMENTS_FILE" --keychain $RUNNER_TEMP/app-signing.keychain-db "$APP_PATH"
 
           # Nén lại thành file IPA hoàn chỉnh
           cd resigned_temp
