@@ -27,9 +27,8 @@ jobs:
 
       - name: Install NPM Dependencies & Plugins
         run: |
-          npm install
-          npm install @capacitor-community/background-geolocation --save || true
-          npm install @capacitor-firebase/messaging --save || true
+          npm ci || npm install
+          npm install @capacitor-community/background-geolocation @capacitor-firebase/messaging --save || true
 
       - name: Build Web App
         run: npm run build --if-present
@@ -50,15 +49,12 @@ jobs:
       - name: Update Version and Build Number
         run: |
           cd ios/App
-          # Cập nhật Marketing Version (Ví dụ: 1.8)
           xcrun agvtool new-marketing-version "1.8"
-          
-          # Tự động gán Build Number theo số lần chạy workflow trên GitHub
           xcrun agvtool new-version -all "${{ github.run_number }}"
           cd ../..
 
       # =========================================================================
-      # 4. IMPORT CERTIFICATE (.P12) AND PROVISIONING PROFILE INTO MACOS RUNNER
+      # 4. IMPORT CERTIFICATE (.P12) AND PROVISIONING PROFILE
       # =========================================================================
       - name: Install Certificate and Provisioning Profile
         env:
@@ -71,11 +67,11 @@ jobs:
           PP_PATH=$RUNNER_TEMP/embedded.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Decode Base64 thành file nhị phân
+          # Decode Base64
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
           echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > $PP_PATH
 
-          # Copy Profile vào thư mục hệ thống mặc định của macOS
+          # Copy Profile vào thư mục hệ thống macOS Runner
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
 
@@ -84,131 +80,80 @@ jobs:
           security set-keychain-settings -lut 3600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # Import Apple WWDR Certificates (Root CA)
+          # Import Apple WWDR Certificates
           curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
-          curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer -o $RUNNER_TEMP/AppleWWDRCAG6.cer
           security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH
-          security import $RUNNER_TEMP/AppleWWDRCAG6.cer -k $KEYCHAIN_PATH
 
-          # Import file .p12 của bạn vào Keychain
+          # Import file .p12
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings $KEYCHAIN_PATH
           security default-keychain -s $KEYCHAIN_PATH
 
       # =========================================================================
-      # 5. BƯỚC BUILD & ARCHIVE THÔ (TẮT HOÀN TOÀN TÍNH NĂNG KÝ MÃ)
+      # 5. TẠO FILE EXPORTOPTIONS.PLIST ĐỂ XUẤT IPA
       # =========================================================================
-      - name: Build Xcode App Archive (Pure Build - No Signing)
+      - name: Create ExportOptions.plist
         run: |
+          cat <<EOF > ExportOptions.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>stripSwiftSymbols</key>
+              <true/>
+              <key>uploadSymbols</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
+      # =========================================================================
+      # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA
+      # =========================================================================
+      - name: Build and Export IPA
+        run: |
+          # Bước A: Archive ứng dụng
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
-                     -derivedDataPath build \
                      -archivePath build/App.xcarchive \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGN_IDENTITY="" \
                      archive
 
-      # =========================================================================
-      # 6. BƯỚC KÝ MÃ (DEEP SIGNING) & ĐÓNG GÓI IPA SAU KHU BUILD XONG
-      # =========================================================================
-      - name: Deep Sign and Package IPA
-        run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          # Unlock Keychain một lần nữa để đảm bảo quyền truy cập chìa khóa
-          security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
-
-          # 1. Chuẩn bị thư mục chứa ứng dụng
-          rm -rf Payload App-signed.ipa
-          mkdir -p Payload
-          cp -r build/App.xcarchive/Products/Applications/App.app Payload/
-          APP_PATH="Payload/App.app"
-
-          # 2. Xóa toàn bộ chữ ký cũ và file rác do bước Archive tạo ra
-          find "$APP_PATH" -name "_CodeSignature" -exec rm -rf {} + || true
-          find "$APP_PATH" -name "*.DS_Store" -exec rm -rf {} + || true
-
-          # 3. Inject GoogleService-Info.plist & Provisioning Profile vào App
-          cp ios/App/App/GoogleService-Info.plist "$APP_PATH/GoogleService-Info.plist" || true
-          cp $RUNNER_TEMP/embedded.mobileprovision "$APP_PATH/embedded.mobileprovision"
-
-          # 4. Trích xuất chính xác Entitlements từ Provisioning Profile
-          security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
-          /usr/libexec/PlistBuddy -x -c 'Print:Entitlements' $RUNNER_TEMP/provision.plist > $RUNNER_TEMP/entitlements.plist
-
-          # 5. Tự động lấy SHA-1 Hash / Identity của Certificate trong Keychain
-          IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -E "Valid identities|Matching identities" -A 5 | grep -E "\)" | head -n 1 | awk -F '"' '{print $2}')
-          if [ -z "$IDENTITY" ]; then
-            IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -E "1\)" | awk '{print $2}')
-          fi
-
-          echo "Using Certificate Identity for Deep Signing: $IDENTITY"
-
-          # 6. THỰC HIỆN KÝ TỪ TRONG RA NGOÀI (INSIDE-OUT RE-SIGNING)
-          # Step A: Ký tất cả các Frameworks con (Capacitor, Cordova, Plugins)
-          if [ -d "$APP_PATH/Frameworks" ]; then
-            for fw in "$APP_PATH/Frameworks"/*; do
-              if [ -d "$fw" ] || [ -f "$fw" ]; then
-                echo "--> Signing Framework: $fw"
-                /usr/bin/codesign --force --sign "$IDENTITY" \
-                  --timestamp \
-                  --keychain $KEYCHAIN_PATH \
-                  "$fw"
-              fi
-            done
-          fi
-
-          # Step B: Ký App Extensions nếu có
-          if [ -d "$APP_PATH/PlugIns" ]; then
-            for plugin in "$APP_PATH/PlugIns"/*; do
-              if [ -d "$plugin" ]; then
-                echo "--> Signing Plugin: $plugin"
-                /usr/bin/codesign --force --sign "$IDENTITY" \
-                  --timestamp \
-                  --keychain $KEYCHAIN_PATH \
-                  "$plugin"
-              fi
-            done
-          fi
-
-          # Step C: Ký toàn bộ App chính với Entitlements chuẩn
-          echo "--> Signing Main Application Bundle: $APP_PATH"
-          /usr/bin/codesign --force --sign "$IDENTITY" \
-            --entitlements $RUNNER_TEMP/entitlements.plist \
-            --timestamp \
-            --keychain $KEYCHAIN_PATH \
-            "$APP_PATH"
-
-          # 7. Kiểm tra độ hợp lệ của chữ ký
-          echo "Verifying App Code Signature..."
-          /usr/bin/codesign --verify --verbose=4 "$APP_PATH"
-
-          # 8. Nén lại thành file IPA
-          zip -qr App-signed.ipa Payload
+          # Bước B: Export ra file .ipa chuẩn
+          xcodebuild -exportArchive \
+                     -archivePath build/App.xcarchive \
+                     -exportOptionsPlist ExportOptions.plist \
+                     -exportPath build/output
 
       # =========================================================================
-      # 6.5. UPLOAD IPA LÊN GITHUB ARTIFACTS (TẢI VỀ MÁY TÍNH)
+      # 7. UPLOAD IPA LÊN GITHUB ARTIFACTS (TẢI VỀ NẾU CẦN)
       # =========================================================================
       - name: Upload IPA to GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-signed-app    # Tên của file zip chứa artifact khi tải về
-          path: App-signed.ipa         # Đường dẫn đến file IPA đã đóng gói ở Bước 6
-          retention-days: 7            # Số ngày lưu trữ trên GitHub (mặc định 90 ngày, để 7 ngày cho tiết kiệm dung lượng)
+          name: ios-build-signed-app
+          path: build/output/*.ipa
+          retention-days: 7
 
       # =========================================================================
-      # 7. UPLOAD IPA ĐÃ KÝ LÊN TESTFLIGHT
+      # 8. UPLOAD IPA LÊN TESTFLIGHT (DÙNG ALTOOL BẰNG APP-SPECIFIC PASSWORD)
       # =========================================================================
       - name: Upload IPA to TestFlight
         env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
           APP_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
         run: |
+          # Tìm file .ipa trong thư mục output
+          IPA_PATH=$(find build/output -name "*.ipa" | head -n 1)
+          
+          echo "Uploading $IPA_PATH to TestFlight..."
           xcrun altool --upload-app \
             --type ios \
-            --file "App-signed.ipa" \
-            --username "codercee@gmail.com" \
+            --file "$IPA_PATH" \
+            --username "$APPLE_ID" \
             --password "$APP_PASSWORD"
