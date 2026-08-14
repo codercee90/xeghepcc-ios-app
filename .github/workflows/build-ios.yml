@@ -120,7 +120,17 @@ jobs:
           echo "Extracted Profile Name: $PROFILE_NAME"
           echo "Extracted Bundle ID: $BUNDLE_ID"
 
-          # 2. Tạo ExportOptions.plist tối ưu (Bỏ signingCertificate cứng để Xcode tự bắt Cert tương thích)
+          # 2. LẤY CHÍNH XÁC TÊN CERTIFICATE TỪ KEYCHAIN VỪA IMPORT
+          CERT_NAME=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -E "Apple Distribution|iOS Distribution" | head -n 1 | awk -F '"' '{print $2}')
+          
+          # Nếu không tìm thấy bằng grep, lấy tên identity đầu tiên trong keychain
+          if [ -z "$CERT_NAME" ]; then
+            CERT_NAME="Apple Distribution"
+          fi
+
+          echo "Using Exact Signing Certificate: $CERT_NAME"
+
+          # 3. Tạo ExportOptions.plist ghi rõ signingCertificate chính xác
           cat <<EOF > $RUNNER_TEMP/ExportOptions.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -136,6 +146,8 @@ jobs:
               <false/>
               <key>signingStyle</key>
               <string>manual</string>
+              <key>signingCertificate</key>
+              <string>$CERT_NAME</string>
               <key>provisioningProfiles</key>
               <dict>
                   <key>$BUNDLE_ID</key>
@@ -145,17 +157,17 @@ jobs:
           </plist>
           EOF
 
-          # 3. Inject GoogleService-Info.plist vào Archive
+          # 4. Inject GoogleService-Info.plist vào Archive
           cp ios/App/App/GoogleService-Info.plist build/App.xcarchive/Products/Applications/App.app/GoogleService-Info.plist || true
 
-          # 4. Xuất IPA chuẩn
+          # 5. Xuất IPA chuẩn
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
                      -exportPath build/output \
                      -allowProvisioningUpdates
 
-          # 5. Đổi tên IPA
+          # 6. Đổi tên IPA chuẩn bị upload
           cp build/output/App.ipa App-signed.ipa
 
       # =========================================================================
