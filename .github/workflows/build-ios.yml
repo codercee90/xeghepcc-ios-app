@@ -48,7 +48,7 @@ jobs:
         run: |
           cd ios/App
           # Đổi số Version hiển thị cho người dùng (Thay "1.0.1" thành phiên bản bạn muốn)
-          xcrun agvtool new-marketing-version "1.2"
+          xcrun agvtool new-marketing-version "1.3"
           
           # Tự động gán số Build Number theo số lần chạy workflow trên GitHub (1, 2, 3,...)
           xcrun agvtool new-version -all "${{ github.run_number }}"
@@ -117,7 +117,7 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 6. KÝ LẠI FILE IPA (ĐÃ SỬA: KÝ CẢ FRAMEWORKS LẪN APP MAIN)
+      # 6. KÝ LẠI FILE IPA (ĐÃ SỬA: BỔ SUNG TRÍCH XUẤT VÀ NHÚNG ENTITLEMENTS)
       # =========================================================================
       - name: Resign IPA File
         run: |
@@ -126,6 +126,10 @@ jobs:
           
           # Đưa Provisioning Profile mới vào trong app
           cp $RUNNER_TEMP/embedded.mobileprovision resigned_temp/Payload/App.app/embedded.mobileprovision
+
+          # Trích xuất Entitlements từ Provisioning Profile
+          security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
+          /usr/libexec/PlistBuddy -x -c 'Print:Entitlements' $RUNNER_TEMP/provision.plist > $RUNNER_TEMP/entitlements.plist
 
           # Tìm tên Chứng Chỉ Distribution vừa import trong Keychain
           IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -n 1 | awk -F '"' '{print $2}')
@@ -146,8 +150,8 @@ jobs:
             done
           fi
 
-          # 2. Ký lại toàn bộ gói App chính
-          /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db resigned_temp/Payload/App.app
+          # 2. Ký lại toàn bộ gói App chính KÈM THEO FILE ENTITLEMENTS
+          /usr/bin/codesign --force --sign "$IDENTITY" --entitlements $RUNNER_TEMP/entitlements.plist --keychain $RUNNER_TEMP/app-signing.keychain-db resigned_temp/Payload/App.app
 
           # Nén lại thành file IPA hoàn chỉnh
           cd resigned_temp
