@@ -172,11 +172,24 @@ jobs:
           cd ..
 
       # =========================================================================
+      # 7. UPLOAD BẢN BUILD LÊN TESTFLIGHT VỚI ALTOOL
+      # =========================================================================
+      - name: Upload IPA to TestFlight
+        env:
+          APP_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+        run: |
+          xcrun altool --upload-app \
+            --type ios \
+            --file "App-signed.ipa" \
+            --username "codercee@gmail.com" \
+            --password "$APP_PASSWORD"
+
+      # =========================================================================
       # 7. TẢI FILE IPA ĐÃ KÝ (SIGNED) LÊN ARTIFACTS ĐỂ DOWNLOAD
       # =========================================================================
-      - name: Upload Signed IPA Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-build-signed
-          path: App-signed.ipa
-          retention-days: 7
+#      - name: Upload Signed IPA Artifact
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: ios-build-signed
+#          path: App-signed.ipa
+#          retention-days: 7
