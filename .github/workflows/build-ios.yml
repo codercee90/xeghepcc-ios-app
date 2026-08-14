@@ -49,7 +49,10 @@ jobs:
       - name: Update Version and Build Number
         run: |
           cd ios/App
+          # Cập nhật Marketing Version
           xcrun agvtool new-marketing-version "1.8"
+          
+          # Tự động gán Build Number theo số lần chạy workflow trên GitHub
           xcrun agvtool new-version -all "${{ github.run_number }}"
           cd ../..
 
@@ -67,11 +70,11 @@ jobs:
           PP_PATH=$RUNNER_TEMP/embedded.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Decode Base64
+          # Decode Base64 thành file nhị phân
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
           echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > $PP_PATH
 
-          # Copy Profile vào thư mục hệ thống macOS Runner
+          # Copy Profile vào thư mục hệ thống mặc định của macOS Runner
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
 
@@ -80,11 +83,11 @@ jobs:
           security set-keychain-settings -lut 3600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # Import Apple WWDR Certificates
+          # Import Apple WWDR Certificates (Root CA)
           curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
           security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH
 
-          # Import file .p12
+          # Import file .p12 vào Keychain
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security default-keychain -s $KEYCHAIN_PATH
@@ -112,7 +115,7 @@ jobs:
           EOF
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA
+      # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA ĐÚNG CHUẨN XCODE
       # =========================================================================
       - name: Build and Export IPA
         run: |
@@ -124,14 +127,14 @@ jobs:
                      -archivePath build/App.xcarchive \
                      archive
 
-          # Bước B: Export ra file .ipa chuẩn
+          # Bước B: Export ra file .ipa chuẩn (Tự động ký code và đóng gói chuẩn Apple)
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
                      -exportPath build/output
 
       # =========================================================================
-      # 7. UPLOAD IPA LÊN GITHUB ARTIFACTS (TẢI VỀ NẾU CẦN)
+      # 7. UPLOAD IPA LÊN GITHUB ARTIFACTS
       # =========================================================================
       - name: Upload IPA to GitHub Artifacts
         uses: actions/upload-artifact@v4
@@ -141,14 +144,14 @@ jobs:
           retention-days: 7
 
       # =========================================================================
-      # 8. UPLOAD IPA LÊN TESTFLIGHT (DÙNG ALTOOL BẰNG APP-SPECIFIC PASSWORD)
+      # 8. UPLOAD IPA LÊN TESTFLIGHT VIA ALTOOL
       # =========================================================================
       - name: Upload IPA to TestFlight
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APP_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
         run: |
-          # Tìm file .ipa trong thư mục output
+          # Tự động tìm file .ipa trong thư mục output
           IPA_PATH=$(find build/output -name "*.ipa" | head -n 1)
           
           echo "Uploading $IPA_PATH to TestFlight..."
@@ -157,3 +160,14 @@ jobs:
             --file "$IPA_PATH" \
             --username "$APPLE_ID" \
             --password "$APP_PASSWORD"
+
+      # =========================================================================
+      # 8. UPLOAD IPA LÊN TESTFLIGHT (Sử dụng Action chuẩn hiện đại)
+      # =========================================================================
+#      - name: Upload IPA to TestFlight
+#        uses: apple-actions/upload-testflight-build@v1
+#        with:
+#          app-path: 'build/output/App.ipa' # Hoặc file .ipa xuất ra trong folder build/output
+#          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+#          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+#          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
