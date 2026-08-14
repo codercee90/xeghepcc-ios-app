@@ -84,10 +84,12 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 5. BUILD XCODE ARCHIVE (BỎ QUA KÝ CÁC GÓI PHỤ SPM)
+      # 5. BUILD XCODE ARCHIVE (CHO PHÉP KÝ CHUẨN TỪ XCODE)
       # =========================================================================
       - name: Build Xcode App Archive
         run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
@@ -96,59 +98,66 @@ jobs:
                      -archivePath build/App.xcarchive \
                      archive \
                      CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
                      PROVISIONING_PROFILE_SPECIFIER=""
 
       # =========================================================================
-      # 6. ĐÓNG GÓI VÀ KÝ CHUẨN ĐỊNH DẠNG TỪNG FRAMEWORK (FIX LỖI 90034)
+      # 6. TẠO EXPORTOPTIONS.PLIST VÀ EXPORT IPA TỰ ĐỘNG BẰNG XCODEBUILD
       # =========================================================================
-      - name: Create Signed IPA Package
+      - name: Export IPA via Xcodebuild
         run: |
-          mkdir -p Payload
-          cp -r build/App.xcarchive/Products/Applications/App.app Payload/
-          
-          APP_PATH="Payload/App.app"
-
-          # 1. Chèn GoogleService-Info.plist và Provisioning Profile chuẩn vào bundle
-          cp ios/App/App/GoogleService-Info.plist "$APP_PATH/GoogleService-Info.plist"
-          cp $RUNNER_TEMP/embedded.mobileprovision "$APP_PATH/embedded.mobileprovision"
-
-          # 2. Trích xuất chính xác Entitlements từ Provisioning Profile
+          # 1. Trích xuất thông tin Team ID và App Profile UUID/Name từ Provisioning Profile
           security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
-          /usr/libexec/PlistBuddy -x -c 'Print:Entitlements' $RUNNER_TEMP/provision.plist > $RUNNER_TEMP/entitlements.plist
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" $RUNNER_TEMP/provision.plist)
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" $RUNNER_TEMP/provision.plist)
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" $RUNNER_TEMP/provision.plist | sed "s/$TEAM_ID.//")
 
-          # 3. Lấy tên Chứng chỉ Distribution trong Keychain
-          IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -n 1 | awk -F '"' '{print $2}')
-          if [ -z "$IDENTITY" ]; then
-            IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | head -n 1 | awk -F '"' '{print $2}')
-          fi
+          echo "Team ID: $TEAM_ID"
+          echo "Profile Name: $PROFILE_NAME"
+          echo "Bundle ID: $BUNDLE_ID"
 
-          echo "Signing with Identity: $IDENTITY"
+          # 2. Tạo file cấu hình ExportOptions.plist chuẩn của Apple
+          cat <<EOF > $RUNNER_TEMP/ExportOptions.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>$TEAM_ID</string>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>uploadBitcode</key>
+              <false/>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingCertificate</key>
+              <string>Apple Distribution</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>$BUNDLE_ID</key>
+                  <string>$PROFILE_NAME</string>
+              </dict>
+          </dict>
+          </plist>
+          EOF
 
-          # 4. KÝ TRỰC TIẾP TẤT CẢ FRAMEWORKS VÀ DYLIB BÊN TRONG (FIX LỖI 90034)
-          if [ -d "$APP_PATH/Frameworks" ]; then
-            find "$APP_PATH/Frameworks" -type f \( -name ".dylib" -o -name "Capacitor" -o -name "Cordova" \) -o -name ".framework" | while read fw; do
-              echo "Re-signing Framework/Binary: $fw"
-              /usr/bin/codesign --force --sign "$IDENTITY" \
-                --preserve-metadata=identifier,entitlements,flags \
-                --keychain $RUNNER_TEMP/app-signing.keychain-db \
-                "$fw"
-            done
-          fi
+          # 3. Chèn GoogleService-Info.plist vào Archive trước khi Export
+          cp ios/App/App/GoogleService-Info.plist build/App.xcarchive/Products/Applications/App.app/GoogleService-Info.plist || true
 
-          # 5. KÝ LẠI APP BUNDLE CHÍNH (GÁN ENTITLEMENTS)
-          /usr/bin/codesign --force --sign "$IDENTITY" \
-            --entitlements $RUNNER_TEMP/entitlements.plist \
-            --keychain $RUNNER_TEMP/app-signing.keychain-db \
-            "$APP_PATH"
+          # 4. Gọi Xcode export ra file IPA chính chủ
+          xcodebuild -exportArchive \
+                     -archivePath build/App.xcarchive \
+                     -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+                     -exportPath build/output \
+                     -allowProvisioningUpdates
 
-          # 6. Nén lại thành file IPA
-          zip -qr App-signed.ipa Payload
+          # 5. Đổi tên file IPA đầu ra
+          cp build/output/App.ipa App-signed.ipa
 
       # =========================================================================
-      # 7. UPLOAD TRỰC TIẾP LÊN TESTFLIGHT VỚI ALTOOL
+      # 7. UPLOAD IPA LÊN TESTFLIGHT
       # =========================================================================
       - name: Upload IPA to TestFlight
         env:
