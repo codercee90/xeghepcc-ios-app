@@ -48,7 +48,7 @@ jobs:
         run: |
           cd ios/App
           # Đổi số Version hiển thị cho người dùng (Thay "1.0.1" thành phiên bản bạn muốn)
-          xcrun agvtool new-marketing-version "1.5"
+          xcrun agvtool new-marketing-version "1.6"
           
           # Tự động gán số Build Number theo số lần chạy workflow trên GitHub (1, 2, 3,...)
           xcrun agvtool new-version -all "${{ github.run_number }}"
@@ -76,7 +76,7 @@ jobs:
           # ÉP COPY FILE PLIST TRỰC TIẾP VÀO BUNDLE NATIVE
           cp ios/App/App/GoogleService-Info.plist Payload/App.app/GoogleService-Info.plist
           
-          # Xóa signature rác để 3uTools/codesign ký lại từ đầu
+          # Xóa signature rác để codesign ký lại từ đầu
           rm -rf Payload/App.app/_CodeSignature
           
           zip -r App-unsigned.ipa Payload
@@ -117,31 +117,31 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 6. KÝ LẠI FILE IPA (TỰ ĐỘNG BÓC TÁCH ENTITLEMENTS CHUẨN TỪ MOBILEPROVISION)
+      # 6. KÝ LẠI FILE IPA (SỬ DỤNG CHÍNH XÁC SHA-1 FINGERPRINT CỦA P12)
       # =========================================================================
       - name: Resign IPA File
+        env:
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
         run: |
-          # Giải nén IPA cũ
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          
+          # 1. Trích xuất SHA-1 Fingerprint chính xác từ file .p12 vừa import
+          IDENTITY=$(openssl pkcs12 -in $CERTIFICATE_PATH -nodes -passin pass:"$P12_PASSWORD" | openssl x509 -noout -fingerprint -sha1 | cut -d'=' -f2 | tr -d ':')
+          echo "Using Certificate SHA-1 Identity: $IDENTITY"
+
+          # 2. Giải nén IPA
           unzip -q App-unsigned.ipa -d resigned_temp
           APP_PATH="resigned_temp/Payload/App.app"
           
-          # 1. Đưa Provisioning Profile mới vào trong app
+          # 3. Đưa Provisioning Profile mới vào trong app
           cp $RUNNER_TEMP/embedded.mobileprovision "$APP_PATH/embedded.mobileprovision"
 
-          # 2. Trích xuất chính xác Entitlements đầy đủ từ Provisioning Profile
+          # 4. Trích xuất chính xác Entitlements từ Provisioning Profile
           security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
           /usr/libexec/PlistBuddy -x -c 'Print:Entitlements' $RUNNER_TEMP/provision.plist > $RUNNER_TEMP/entitlements.plist
           ENTITLEMENTS_FILE="$RUNNER_TEMP/entitlements.plist"
 
-          # 3. Tìm tên Chứng Chỉ Distribution trong Keychain
-          IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -n 1 | awk -F '"' '{print $2}')
-          if [ -z "$IDENTITY" ]; then
-            IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | head -n 1 | awk -F '"' '{print $2}')
-          fi
-
-          echo "Signing with Identity: $IDENTITY"
-
-          # 4. Ký tất cả các Frameworks/SPM con bên trong
+          # 5. Ký tất cả các Frameworks/SPM con bên trong
           if [ -d "$APP_PATH/Frameworks" ]; then
             find "$APP_PATH/Frameworks" -mindepth 1 -maxdepth 1 | while read framework; do
               echo "Signing Framework: $framework"
@@ -149,7 +149,7 @@ jobs:
             done
           fi
 
-          # 5. Ký tất cả App Extensions (nếu có PlugIns)
+          # 6. Ký tất cả App Extensions (nếu có)
           if [ -d "$APP_PATH/PlugIns" ]; then
             find "$APP_PATH/PlugIns" -mindepth 1 -maxdepth 1 | while read plugin; do
               echo "Signing App Extension: $plugin"
@@ -157,7 +157,7 @@ jobs:
             done
           fi
 
-          # 6. Ký lại toàn bộ gói App chính KÈM ENTITLEMENTS ĐẦY ĐỦ
+          # 7. Ký lại gói App chính
           /usr/bin/codesign --force --sign "$IDENTITY" --entitlements "$ENTITLEMENTS_FILE" --keychain $RUNNER_TEMP/app-signing.keychain-db "$APP_PATH"
 
           # Nén lại thành file IPA hoàn chỉnh
