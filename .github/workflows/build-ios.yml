@@ -125,6 +125,9 @@ jobs:
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_ALLOWED=NO \
                      archive
 
           # Bước B: Export ra file .ipa chuẩn (Tự động ký code và đóng gói chuẩn Apple)
