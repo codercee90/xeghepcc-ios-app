@@ -48,7 +48,7 @@ jobs:
         run: |
           cd ios/App
           # Đổi số Version hiển thị cho người dùng (Thay "1.0.1" thành phiên bản bạn muốn)
-          xcrun agvtool new-marketing-version "1.1"
+          xcrun agvtool new-marketing-version "1.2"
           
           # Tự động gán số Build Number theo số lần chạy workflow trên GitHub (1, 2, 3,...)
           xcrun agvtool new-version -all "${{ github.run_number }}"
@@ -117,7 +117,7 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 6. KÝ LẠI FILE IPA (RE-SIGN IPA)
+      # 6. KÝ LẠI FILE IPA (ĐÃ SỬA: KÝ CẢ FRAMEWORKS LẪN APP MAIN)
       # =========================================================================
       - name: Resign IPA File
         run: |
@@ -127,17 +127,26 @@ jobs:
           # Đưa Provisioning Profile mới vào trong app
           cp $RUNNER_TEMP/embedded.mobileprovision resigned_temp/Payload/App.app/embedded.mobileprovision
 
-          # Tìm tên Tên Tên Chứng Chỉ Distribution vừa import trong Keychain
+          # Tìm tên Chứng Chỉ Distribution vừa import trong Keychain
           IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -n 1 | awk -F '"' '{print $2}')
           
-          # Nếu không tìm thấy tên Distribution, lấy chứng chỉ ký code bất kỳ trong keychain vừa tạo
           if [ -z "$IDENTITY" ]; then
             IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | head -n 1 | awk -F '"' '{print $2}')
           fi
 
           echo "Signing with Identity: $IDENTITY"
 
-          # Ký lại toàn bộ gói App
+          # 1. Ký tất cả các Frameworks con bên trong (như Capacitor.framework, Cordova.framework,...)
+          if [ -d "resigned_temp/Payload/App.app/Frameworks" ]; then
+            for framework in resigned_temp/Payload/App.app/Frameworks/*; do
+              if [ -d "$framework" ] || [ -f "$framework" ]; then
+                echo "Signing Framework: $framework"
+                /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db "$framework"
+              fi
+            done
+          fi
+
+          # 2. Ký lại toàn bộ gói App chính
           /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db resigned_temp/Payload/App.app
 
           # Nén lại thành file IPA hoàn chỉnh
