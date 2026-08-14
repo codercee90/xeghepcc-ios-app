@@ -102,7 +102,7 @@ jobs:
                      PROVISIONING_PROFILE_SPECIFIER=""
 
       # =========================================================================
-      # 6. ĐÓNG GÓI VÀ KÝ DEEP TOÀN BỘ APP & FRAMEWORKS CHUẨN ĐỒNG BỘ
+      # 6. ĐÓNG GÓI VÀ KÝ CHUẨN ĐỊNH DẠNG TỪNG FRAMEWORK (FIX LỖI 90034)
       # =========================================================================
       - name: Create Signed IPA Package
         run: |
@@ -127,13 +127,24 @@ jobs:
 
           echo "Signing with Identity: $IDENTITY"
 
-          # 4. Ký Deep lại toàn bộ App Bundle (Fix triệt để chữ ký Capacitor & Cordova)
-          /usr/bin/codesign --force --deep --sign "$IDENTITY" \
+          # 4. KÝ TRỰC TIẾP TẤT CẢ FRAMEWORKS VÀ DYLIB BÊN TRONG (FIX LỖI 90034)
+          if [ -d "$APP_PATH/Frameworks" ]; then
+            find "$APP_PATH/Frameworks" -type f \( -name ".dylib" -o -name "Capacitor" -o -name "Cordova" \) -o -name ".framework" | while read fw; do
+              echo "Re-signing Framework/Binary: $fw"
+              /usr/bin/codesign --force --sign "$IDENTITY" \
+                --preserve-metadata=identifier,entitlements,flags \
+                --keychain $RUNNER_TEMP/app-signing.keychain-db \
+                "$fw"
+            done
+          fi
+
+          # 5. KÝ LẠI APP BUNDLE CHÍNH (GÁN ENTITLEMENTS)
+          /usr/bin/codesign --force --sign "$IDENTITY" \
             --entitlements $RUNNER_TEMP/entitlements.plist \
             --keychain $RUNNER_TEMP/app-signing.keychain-db \
             "$APP_PATH"
 
-          # 5. Nén lại thành file IPA
+          # 6. Nén lại thành file IPA
           zip -qr App-signed.ipa Payload
 
       # =========================================================================
