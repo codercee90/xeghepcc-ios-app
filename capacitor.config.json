@@ -4,7 +4,7 @@
   "webDir": "dist",
   "plugins": {
     "BackgroundGeolocation": {
-      "backgroundMessage": "Đang cập nhật vị trí hành trình cho khách...",
+      "backgroundMessage": "Đang cập nhật vị trí hành trình...",
       "backgroundTitle": "XeGhep.CC đang chạy ngầm"
     },
     "SplashScreen": {
