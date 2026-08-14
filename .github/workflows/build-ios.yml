@@ -1,4 +1,4 @@
-name: Build iOS App
+name: Build and Upload iOS App to TestFlight
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios:
+  build-and-upload:
     runs-on: macos-latest
 
     steps:
@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24  # Khuyên dùng Node 20 LTS để ổn định nhất với Capacitor CLI
+          node-version: 24
           cache: 'npm'
 
       - name: Install NPM Dependencies & Plugins
@@ -41,55 +41,16 @@ jobs:
           npx cap add ios || true
           npx cap sync ios
 
-      # =========================================================================
-      # TỰ ĐỘNG CẬP NHẬT VERSION VÀ BUILD NUMBER
-      # =========================================================================
+      # 3. Tự động cập nhật Version và Build Number
       - name: Update Version and Build Number
         run: |
           cd ios/App
-          # Đổi số Version hiển thị cho người dùng (Thay "1.0.1" thành phiên bản bạn muốn)
           xcrun agvtool new-marketing-version "1.8"
-          
-          # Tự động gán số Build Number theo số lần chạy workflow trên GitHub (1, 2, 3,...)
           xcrun agvtool new-version -all "${{ github.run_number }}"
           cd ../..
 
-      # 3. Build Xcode Binary
-      - name: Build Xcode App
-        run: |
-          xcodebuild -project ios/App/App.xcodeproj \
-                     -scheme App \
-                     -configuration Release \
-                     -sdk iphoneos \
-                     -derivedDataPath build \
-                     CODE_SIGN_IDENTITY="" \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_ALLOWED=NO \
-                     DISABLE_EXTRA_APP_PLIST_ENTITLEMENTS=YES
-
-      # 4. ĐÓNG GÓI IPA (INJECT TRỰC TIẾP FILE PLIST VÀO APP BUNDLE)
-      - name: Create Clean IPA Package
-        run: |
-          mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/App.app Payload/
-          
-          # ÉP COPY FILE PLIST TRỰC TIẾP VÀO BUNDLE NATIVE
-          cp ios/App/App/GoogleService-Info.plist Payload/App.app/GoogleService-Info.plist
-          
-          # Xóa signature rác để 3uTools/codesign ký lại từ đầu
-          rm -rf Payload/App.app/_CodeSignature
-          
-          zip -r App-unsigned.ipa Payload
-
-      - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-build-unsigned
-          path: App-unsigned.ipa
-          retention-days: 7
-
       # =========================================================================
-      # 5. CÀI ĐẶT CERTIFICATE (.p12) VÀ PROVISIONING PROFILE VÀO MACOS RUNNER
+      # 4. CÀI ĐẶT CERTIFICATE (.p12) VÀ PROVISIONING PROFILE VÀO MACOS RUNNER
       # =========================================================================
       - name: Install Certificate and Provisioning Profile
         env:
@@ -111,7 +72,7 @@ jobs:
           security set-keychain-settings -lut 3600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # TẢI VÀ NHẬP CHỨNG CHỈ TRUNG GIAN CỦA APPLE (WWDR G3/G6) ĐỂ XÁC THỰC CERTIFICATE
+          # Cài đặt chứng chỉ trung gian của Apple (WWDR)
           curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
           curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer -o $RUNNER_TEMP/AppleWWDRCAG6.cer
           security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH
@@ -123,95 +84,40 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 6. RESIGN IPA FILE WITH ROBUST DEEP SIGNING SCRIPT
+      # 5. BUILD XCODE ARCHIVE VÀ TỰ ĐỘNG KÝ TRỰC TIẾP TỪ XCODE
       # =========================================================================
-      - name: Resign IPA File
+      - name: Build Xcode App Archive
         run: |
-          # Unzip the unsigned IPA
-          unzip -q App-unsigned.ipa -d resigned_temp
-          APP_PATH="resigned_temp/Payload/App.app"
-          
-          # 1. Embed the correct Provisioning Profile
-          cp $RUNNER_TEMP/embedded.mobileprovision "$APP_PATH/embedded.mobileprovision"
-
-          # 2. Extract full entitlements from the Provisioning Profile
-          security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
-          /usr/libexec/PlistBuddy -x -c 'Print:Entitlements' $RUNNER_TEMP/provision.plist > $RUNNER_TEMP/entitlements.plist
-          ENTITLEMENTS_FILE="$RUNNER_TEMP/entitlements.plist"
-
-          # 3. Find the valid "Apple Distribution" certificate in the Keychain
-          IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Apple Distribution" | head -n 1 | awk -F '"' '{print $2}')
-          if [ -z "$IDENTITY" ]; then
-            IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | head -n 1 | awk -F '"' '{print $2}')
-          fi
-
-          if [ -z "$IDENTITY" ]; then
-            echo "Error: No valid signing identity found."
-            exit 1
-          fi
-
-          echo "Signing with Identity: $IDENTITY"
-
-          # 4. Remove all existing signatures to prevent conflicts
-          find "$APP_PATH" -name "_CodeSignature" -exec rm -rf {} + 2>/dev/null || true
-
-          # 5. DEFINE THE DEEP SIGNING SCRIPT
-          cat > sign_item.sh << 'EOF'
-          IDENTITY=$1
-          KEYCHAIN=$2
-          ENTITLEMENTS=$3
-          ITEM=$4
-
-          # Prevent infinite loops and only process what's necessary
-          if [[ $ITEM == *".mobileprovision" ]] || [[ $ITEM == *".plist" ]] || [[ $ITEM == *"_CodeSignature" ]]; then
-            return 0
-          fi
-          
-          echo "Processing: $ITEM"
-          
-          # Recursively process children first for deep signing
-          if [ -d "$ITEM" ]; then
-            for child in "$ITEM"/*; do
-              # Ensure there's a file to process (handle empty directories)
-              [ -e "$child" ] && /bin/bash sign_item.sh "$IDENTITY" "$KEYCHAIN" "$ENTITLEMENTS" "$child"
-            done
-          fi
-
-          # Function to apply the signature
-          apply_signature() {
-            local TARGET=$1
-            local OPTS=$2
-            echo "Applying signature to: $TARGET"
-            /usr/bin/codesign --force --timestamp --sign "$IDENTITY" --keychain "$KEYCHAIN" $OPTS "$TARGET"
-          }
-
-          # Handle the primary signature for the item
-          if [[ $ITEM == *.app ]]; then
-            # Main app bundle gets specific entitlements
-            apply_signature "$ITEM" "--entitlements $ENTITLEMENTS"
-          elif [ -f "$ITEM" ] && [[ $ITEM == .dylib || $ITEM == *.framework || $ITEM == .appex || $ITEM == */PlugIns/ ]]; then
-            # Frameworks, extensions, and dylibs get timestamped signatures
-            apply_signature "$ITEM"
-          elif [ -d "$ITEM" ] && [[ $ITEM == *.framework || $ITEM == *.appex ]]; then
-            # Directory-based frameworks and extensions
-            apply_signature "$ITEM"
-          fi
-          EOF
-
-          # 6. EXECUTE THE SIGNING PROCESS
-          chmod +x sign_item.sh
-          /bin/bash sign_item.sh "$IDENTITY" "$RUNNER_TEMP/app-signing.keychain-db" "$ENTITLEMENTS_FILE" "$APP_PATH"
-
-          # Clean up the script
-          rm sign_item.sh
-
-          # 7. Re-package the signed IPA
-          cd resigned_temp
-          zip -qr ../App-signed.ipa Payload
-          cd ..
+          xcodebuild -project ios/App/App.xcodeproj \
+                     -scheme App \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     -derivedDataPath build \
+                     -archivePath build/App.xcarchive \
+                     archive \
+                     CODE_SIGN_STYLE="Manual" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     PROVISIONING_PROFILE_SPECIFIER=""
 
       # =========================================================================
-      # 7. UPLOAD BẢN BUILD LÊN TESTFLIGHT VỚI ALTOOL
+      # 6. ĐÓNG GÓI CHUẨN IPA TỪ ARCHIVE (KHÔNG DÙNG CODESIGN THỦ CÔNG)
+      # =========================================================================
+      - name: Create Signed IPA Package
+        run: |
+          mkdir -p Payload
+          cp -r build/App.xcarchive/Products/Applications/App.app Payload/
+          
+          # Inject GoogleService-Info.plist nếu cần
+          cp ios/App/App/GoogleService-Info.plist Payload/App.app/GoogleService-Info.plist
+          
+          # Đưa Provisioning Profile chuẩn vào bundle app
+          cp $RUNNER_TEMP/embedded.mobileprovision Payload/App.app/embedded.mobileprovision
+          
+          # Đóng gói thành file IPA hoàn chỉnh
+          zip -qr App-signed.ipa Payload
+
+      # =========================================================================
+      # 7. UPLOAD IPA TRỰC TIẾP LÊN TESTFLIGHT VỚI ALTOOL
       # =========================================================================
       - name: Upload IPA to TestFlight
         env:
@@ -222,13 +128,3 @@ jobs:
             --file "App-signed.ipa" \
             --username "codercee@gmail.com" \
             --password "$APP_PASSWORD"
-
-      # =========================================================================
-      # 7. TẢI FILE IPA ĐÃ KÝ (SIGNED) LÊN ARTIFACTS ĐỂ DOWNLOAD
-      # =========================================================================
-#      - name: Upload Signed IPA Artifact
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: ios-build-signed
-#          path: App-signed.ipa
-#          retention-days: 7
