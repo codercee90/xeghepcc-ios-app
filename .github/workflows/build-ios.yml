@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24  # Khuyên dùng Node 20 LTS để ổn định nhất với Capacitor CLI
+          node-version: 20
           cache: 'npm'
 
       - name: Install NPM Dependencies & Plugins
@@ -47,10 +47,7 @@ jobs:
       - name: Update Version and Build Number
         run: |
           cd ios/App
-          # Đổi số Version hiển thị cho người dùng (Thay "1.0.1" thành phiên bản bạn muốn)
-          xcrun agvtool new-marketing-version "1.6"
-          
-          # Tự động gán số Build Number theo số lần chạy workflow trên GitHub (1, 2, 3,...)
+          xcrun agvtool new-marketing-version "1.8"
           xcrun agvtool new-version -all "${{ github.run_number }}"
           cd ../..
 
@@ -72,13 +69,8 @@ jobs:
         run: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/App.app Payload/
-          
-          # ÉP COPY FILE PLIST TRỰC TIẾP VÀO BUNDLE NATIVE
           cp ios/App/App/GoogleService-Info.plist Payload/App.app/GoogleService-Info.plist
-          
-          # Xóa signature rác để codesign ký lại từ đầu
           rm -rf Payload/App.app/_CodeSignature
-          
           zip -r App-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
@@ -89,7 +81,7 @@ jobs:
           retention-days: 7
 
       # =========================================================================
-      # 5. CÀI ĐẶT CERTIFICATE (.p12) VÀ PROVISIONING PROFILE VÀO MACOS RUNNER
+      # 5. CÀI ĐẶT CERTIFICATE, APPLE WWDR CA VÀ PROVISIONING PROFILE
       # =========================================================================
       - name: Install Certificate and Provisioning Profile
         env:
@@ -102,7 +94,7 @@ jobs:
           PP_PATH=$RUNNER_TEMP/embedded.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Giải mã file từ Base64
+          # 解码 Base64
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
           echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > $PP_PATH
 
@@ -111,23 +103,31 @@ jobs:
           security set-keychain-settings -lut 3600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
+          # Tải và cài đặt Apple Intermediate Certificates (Bắt buộc để chứng chỉ .p12 được Trust)
+          curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
+          curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG6.cer -o $RUNNER_TEMP/AppleWWDRCAG6.cer
+          security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH
+          security import $RUNNER_TEMP/AppleWWDRCAG6.cer -k $KEYCHAIN_PATH
+
           # Import Cert .p12 vào Keychain
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 6. KÝ LẠI FILE IPA (SỬ DỤNG CHÍNH XÁC SHA-1 FINGERPRINT CỦA P12)
+      # 6. KÝ LẠI FILE IPA (SỬ DỤNG IDENTITY CHUẨN ĐƯỢC TẢI TỪ P12)
       # =========================================================================
       - name: Resign IPA File
-        env:
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
         run: |
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           
-          # 1. Trích xuất SHA-1 Fingerprint chính xác từ file .p12 vừa import
-          IDENTITY=$(openssl pkcs12 -in $CERTIFICATE_PATH -nodes -passin pass:"$P12_PASSWORD" | openssl x509 -noout -fingerprint -sha1 | cut -d'=' -f2 | tr -d ':')
-          echo "Using Certificate SHA-1 Identity: $IDENTITY"
+          # 1. Tìm chính xác Name Identity vừa tạo trong Keychain từ file p12
+          IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -E "Apple Distribution|iPhone Distribution|Apple Development" | head -n 1 | awk -F '"' '{print $2}')
+          if [ -z "$IDENTITY" ]; then
+            IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -v "0 valid identities found" | head -n 1 | awk -F '"' '{print $2}')
+          fi
+
+          echo "Detected Signing Identity: [$IDENTITY]"
 
           # 2. Giải nén IPA
           unzip -q App-unsigned.ipa -d resigned_temp
@@ -145,7 +145,7 @@ jobs:
           if [ -d "$APP_PATH/Frameworks" ]; then
             find "$APP_PATH/Frameworks" -mindepth 1 -maxdepth 1 | while read framework; do
               echo "Signing Framework: $framework"
-              /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db "$framework"
+              /usr/bin/codesign --force --sign "$IDENTITY" --keychain $KEYCHAIN_PATH "$framework"
             done
           fi
 
@@ -153,12 +153,12 @@ jobs:
           if [ -d "$APP_PATH/PlugIns" ]; then
             find "$APP_PATH/PlugIns" -mindepth 1 -maxdepth 1 | while read plugin; do
               echo "Signing App Extension: $plugin"
-              /usr/bin/codesign --force --sign "$IDENTITY" --keychain $RUNNER_TEMP/app-signing.keychain-db "$plugin"
+              /usr/bin/codesign --force --sign "$IDENTITY" --keychain $KEYCHAIN_PATH "$plugin"
             done
           fi
 
           # 7. Ký lại gói App chính
-          /usr/bin/codesign --force --sign "$IDENTITY" --entitlements "$ENTITLEMENTS_FILE" --keychain $RUNNER_TEMP/app-signing.keychain-db "$APP_PATH"
+          /usr/bin/codesign --force --sign "$IDENTITY" --entitlements "$ENTITLEMENTS_FILE" --keychain $KEYCHAIN_PATH "$APP_PATH"
 
           # Nén lại thành file IPA hoàn chỉnh
           cd resigned_temp
@@ -166,7 +166,7 @@ jobs:
           cd ..
 
       # =========================================================================
-      # 7. TẢI FILE IPA ĐÃ KÝ (SIGNED) LÊN ARTIFACTS ĐỂ DOWNLOAD
+      # 7. TẢI FILE IPA ĐÃ KÝ LÊN ARTIFACTS
       # =========================================================================
       - name: Upload Signed IPA Artifact
         uses: actions/upload-artifact@v4
