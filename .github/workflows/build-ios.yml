@@ -84,12 +84,16 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 5. BUILD XCODE ARCHIVE (CHO PHÉP KÝ CHUẨN TỪ XCODE)
+      # 5. BUILD XCODE ARCHIVE (TRUYỀN TEAM ID CHO SPM DEPENDENCIES)
       # =========================================================================
       - name: Build Xcode App Archive
         run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          # 1. Trích xuất Team ID từ Provisioning Profile
+          security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" $RUNNER_TEMP/provision.plist)
+          echo "Extracted Team ID: $TEAM_ID"
 
+          # 2. Archive và truyền thẳng DEVELOPMENT_TEAM để các gói SPM không bị báo lỗi
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
@@ -97,26 +101,22 @@ jobs:
                      -derivedDataPath build \
                      -archivePath build/App.xcarchive \
                      archive \
+                     DEVELOPMENT_TEAM="$TEAM_ID" \
                      CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     PROVISIONING_PROFILE_SPECIFIER=""
+                     CODE_SIGN_IDENTITY="Apple Distribution"
 
       # =========================================================================
       # 6. TẠO EXPORTOPTIONS.PLIST VÀ EXPORT IPA TỰ ĐỘNG BẰNG XCODEBUILD
       # =========================================================================
       - name: Export IPA via Xcodebuild
         run: |
-          # 1. Trích xuất thông tin Team ID và App Profile UUID/Name từ Provisioning Profile
+          # 1. Trích xuất lại các thông tin cần thiết
           security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
           TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" $RUNNER_TEMP/provision.plist)
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" $RUNNER_TEMP/provision.plist)
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" $RUNNER_TEMP/provision.plist | sed "s/$TEAM_ID.//")
 
-          echo "Team ID: $TEAM_ID"
-          echo "Profile Name: $PROFILE_NAME"
-          echo "Bundle ID: $BUNDLE_ID"
-
-          # 2. Tạo file cấu hình ExportOptions.plist chuẩn của Apple
+          # 2. Tạo file cấu hình ExportOptions.plist
           cat <<EOF > $RUNNER_TEMP/ExportOptions.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -143,17 +143,17 @@ jobs:
           </plist>
           EOF
 
-          # 3. Chèn GoogleService-Info.plist vào Archive trước khi Export
+          # 3. Inject GoogleService-Info.plist nếu cần
           cp ios/App/App/GoogleService-Info.plist build/App.xcarchive/Products/Applications/App.app/GoogleService-Info.plist || true
 
-          # 4. Gọi Xcode export ra file IPA chính chủ
+          # 4. Xuất IPA bằng exportArchive
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
                      -exportPath build/output \
                      -allowProvisioningUpdates
 
-          # 5. Đổi tên file IPA đầu ra
+          # 5. Đổi tên IPA chuẩn bị cho bước upload
           cp build/output/App.ipa App-signed.ipa
 
       # =========================================================================
