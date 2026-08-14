@@ -103,11 +103,14 @@ jobs:
                      CODE_SIGN_IDENTITY=""
 
       # =========================================================================
-      # 6. ĐÓNG GÓI VÀ KÝ CHUẨN DEEP RE-SIGN (TỰ ĐỘNG FIX LỖI 90179 & 90034)
+      # 6. ĐÓNG GÓI VÀ KÝ CHUẨN DEEP RE-SIGN
       # =========================================================================
       - name: Create Perfectly Signed IPA Package
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Unlock keychain một lần nữa để chắc chắn
+          security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
 
           # 1. Chuẩn bị thư mục Payload
           rm -rf Payload App-signed.ipa
@@ -115,24 +118,30 @@ jobs:
           cp -r build/App.xcarchive/Products/Applications/App.app Payload/
           APP_PATH="Payload/App.app"
 
-          # 2. XÓA SẠCH 100% CHỮ KÝ CŨ VÀ TỆP RÁC BÊN TRONG (Rất quan trọng)
+          # 2. Xóa sạch 100% chữ ký cũ và file rác
           find "$APP_PATH" -name "_CodeSignature" -exec rm -rf {} + || true
           find "$APP_PATH" -name "*.DS_Store" -exec rm -rf {} + || true
 
-          # 3. Inject GoogleService-Info.plist & Provisioning Profile chính chủ
+          # 3. Inject GoogleService-Info.plist & Provisioning Profile
           cp ios/App/App/GoogleService-Info.plist "$APP_PATH/GoogleService-Info.plist" || true
           cp $RUNNER_TEMP/embedded.mobileprovision "$APP_PATH/embedded.mobileprovision"
 
-          # 4. Trích xuất chính xác Entitlements từ Provisioning Profile
+          # 4. Trích xuất Entitlements
           security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
           /usr/libexec/PlistBuddy -x -c 'Print:Entitlements' $RUNNER_TEMP/provision.plist > $RUNNER_TEMP/entitlements.plist
 
-          # 5. Lấy chính xác Identity Chữ ký từ Keychain
-          IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -E "Apple Distribution|iOS Distribution" | head -n 1 | awk -F '"' '{print $2}')
-          echo "Executing Deep Signing with Identity: $IDENTITY"
+          # 5. LẤY IDENTITY AN TOÀN TRONG KEYCHAIN (Bao gồm cả mã HEX Hash)
+          IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -E "Valid identities|Matching identities" -A 5 | grep -E "\)" | head -n 1 | awk -F '"' '{print $2}')
+          
+          # Nếu lấy bằng tên thất bại, lấy bằng SHA-1 Hash
+          if [ -z "$IDENTITY" ]; then
+            IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -E "1\)" | awk '{print $2}')
+          fi
+
+          echo "Found Identity: $IDENTITY"
 
           # 6. KÝ TỪ TRONG RA NGOÀI (RECURSIVE INSIDE-OUT)
-          # Step A: Ký tất cả các Dylibs và Frameworks con (Capacitor, Cordova, SPM...)
+          # Step A: Frameworks
           if [ -d "$APP_PATH/Frameworks" ]; then
             for fw in "$APP_PATH/Frameworks"/*; do
               if [ -d "$fw" ] || [ -f "$fw" ]; then
@@ -145,7 +154,7 @@ jobs:
             done
           fi
 
-          # Step B: Ký App Extensions nếu có (Appex)
+          # Step B: Extensions
           if [ -d "$APP_PATH/PlugIns" ]; then
             for plugin in "$APP_PATH/PlugIns"/*; do
               if [ -d "$plugin" ]; then
@@ -158,7 +167,7 @@ jobs:
             done
           fi
 
-          # Step C: Ký App Bundle Chính (Ép Entitlements & Timestamp)
+          # Step C: Main App Bundle
           echo "--> Signing Main App Bundle: $APP_PATH"
           /usr/bin/codesign --force --sign "$IDENTITY" \
             --entitlements $RUNNER_TEMP/entitlements.plist \
@@ -166,7 +175,7 @@ jobs:
             --keychain $KEYCHAIN_PATH \
             "$APP_PATH"
 
-          # 7. Kiểm tra tính hợp lệ chữ ký bằng Lệnh Verify của Apple
+          # 7. Kiểm tra tính hợp lệ
           echo "Verifying Code Signature..."
           /usr/bin/codesign --verify --verbose=4 "$APP_PATH"
 
