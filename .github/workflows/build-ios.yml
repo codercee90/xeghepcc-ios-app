@@ -87,29 +87,36 @@ jobs:
           security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
       # =========================================================================
-      # 5. BUILD XCODE ARCHIVE (CHO PHÉP XCODE TỰ KÝ CHUẨN TRONG ARCHIVE)
+      # 5. BUILD XCODE ARCHIVE (TRUYỀN TEAM ID TRỰC TIẾP)
       # =========================================================================
       - name: Build Xcode App Archive
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
+          # 1. Trích xuất Team ID từ Provisioning Profile
+          security cms -D -i $RUNNER_TEMP/embedded.mobileprovision > $RUNNER_TEMP/provision.plist
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" $RUNNER_TEMP/provision.plist)
+          echo "Extracted Team ID: $TEAM_ID"
+
+          # 2. Archive và truyền thẳng DEVELOPMENT_TEAM để Xcode duyệt qua
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -derivedDataPath build \
                      -archivePath build/App.xcarchive \
+                     DEVELOPMENT_TEAM="$TEAM_ID" \
                      OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
                      archive
 
       # =========================================================================
-      # 6. EXPORT IPA NGUYÊN BẢN BẰNG XCODEBUILD (XỬ LÝ DỨT ĐIỂM LỖI 90179)
+      # 6. EXPORT IPA NGUYÊN BẢN BẰNG XCODEBUILD
       # =========================================================================
       - name: Export IPA via Xcodebuild
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Set Keychain tạm làm mặc định để xcodebuild nhận diện Cert
+          # Set Keychain tạm làm mặc định
           security default-keychain -s $KEYCHAIN_PATH
           security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" $KEYCHAIN_PATH
 
@@ -119,7 +126,14 @@ jobs:
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" $RUNNER_TEMP/provision.plist)
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" $RUNNER_TEMP/provision.plist | sed "s/$TEAM_ID.//")
 
-          # 2. Tạo ExportOptions.plist hỗ trợ Automatic/Manual Matching chuẩn nhất
+          # 2. Lấy tên Certificate thực tế trong Keychain
+          CERT_NAME=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep -E "Apple Distribution|iOS Distribution" | head -n 1 | awk -F '"' '{print $2}')
+          if [ -z "$CERT_NAME" ]; then
+            CERT_NAME="Apple Distribution"
+          fi
+          echo "Exporting with Certificate: $CERT_NAME"
+
+          # 3. Tạo ExportOptions.plist chuẩn
           cat <<EOF > $RUNNER_TEMP/ExportOptions.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -135,6 +149,8 @@ jobs:
               <false/>
               <key>signingStyle</key>
               <string>manual</string>
+              <key>signingCertificate</key>
+              <string>$CERT_NAME</string>
               <key>provisioningProfiles</key>
               <dict>
                   <key>$BUNDLE_ID</key>
@@ -144,17 +160,17 @@ jobs:
           </plist>
           EOF
 
-          # 3. Inject GoogleService-Info.plist vào Archive nếu có
+          # 4. Inject GoogleService-Info.plist nếu có
           cp ios/App/App/GoogleService-Info.plist build/App.xcarchive/Products/Applications/App.app/GoogleService-Info.plist || true
 
-          # 4. Xuất IPA bằng Xcodebuild (Xcode sẽ tự ghép cặp Cert + Profile chuẩn 100%)
+          # 5. Xuất IPA chính thức
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
                      -exportPath build/output \
                      -allowProvisioningUpdates
 
-          # 5. Copy file IPA đầu ra
+          # 6. Copy file IPA đầu ra
           cp build/output/App.ipa App-signed.ipa
 
       # =========================================================================
