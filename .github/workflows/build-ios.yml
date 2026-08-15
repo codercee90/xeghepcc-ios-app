@@ -172,8 +172,8 @@ jobs:
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
                      -xcconfig app_signing.xcconfig \
-                     CODE_SIGN_ENTITLEMENTS = "App/App.entitlements" \
-                     archive
+                     archive \
+                     CODE_SIGN_ENTITLEMENTS="App/App.entitlements"
 
           # 4. Export IPA
           xcodebuild -exportArchive \
