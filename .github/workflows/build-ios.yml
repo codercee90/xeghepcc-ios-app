@@ -211,12 +211,15 @@ jobs:
       # =========================================================================
       - name: Upload and Distribute to TestFlight
         env:
-          APP_STORE_CONNECT_API_KEY_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          APP_STORE_CONNECT_API_KEY_IS_KEY_CONTENT_BASE64: "true"
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
+          # Đưa Private Key thành 1 dòng để truyền vào JSON
+          KEY_CONTENT=$(echo "$PRIVATE_KEY" | tr -d '\r')
+        
           fastlane run upload_to_testflight \
+          api_key:"{\"key_id\",\"$KEY_ID\",\"issuer_id\",\"$ISSUER_ID\",\"key\",\"$KEY_CONTENT\",\"is_key_content_base64\":true}" \
           ipa:"build/output/App.ipa" \
           skip_waiting_for_build_processing:false \
           uses_non_exempt_encryption:false \
