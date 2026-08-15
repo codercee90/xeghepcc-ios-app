@@ -103,7 +103,7 @@ jobs:
           security default-keychain -s $KEYCHAIN_PATH
 
       # =========================================================================
-      # 5. TẠO FILE EXPORTOPTIONS.PLIST ĐỂ XUẤT IPA
+      # 5. TẠO FILE EXPORTOPTIONS.PLIST CHUẨN APP STORE / TESTFLIGHT
       # =========================================================================
       - name: Create ExportOptions.plist
         run: |
@@ -114,7 +114,6 @@ jobs:
 
           data = {
               'method': 'app-store',
-              'destination': 'export',
               'signingStyle': 'manual',
               'signingCertificate': 'Apple Distribution',
               'provisioningProfiles': {
@@ -122,6 +121,7 @@ jobs:
               },
               'stripSwiftSymbols': True,
               'uploadSymbols': True,
+              'manageAppVersionAndBuildNumber': False,
               'teamID': 'HK58UX9N3D'
           }
 
@@ -130,33 +130,32 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA (FIX TRIỆT ĐỂ BẰNG XCCONFIG)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (KÝ ĐÚNG CHUẨN EMBEDDED PROFILE)
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          # 1. Tạo file overrides.xcconfig để ép buộc quy tắc signing
-          cat <<'EOF' > overrides.xcconfig
-          // Reset cấu hình mặc định cho tất cả các target
-          CODE_SIGN_STYLE = Automatic
-          PROVISIONING_PROFILE_SPECIFIER =
-          
-          // Chỉ áp dụng Manual signing và Profile XeGhep cho target App chính
-          CODE_SIGN_STYLE[sdk=iphoneos*][target=App] = Manual
-          DEVELOPMENT_TEAM[sdk=iphoneos*][target=App] = HK58UX9N3D
-          CODE_SIGN_IDENTITY[sdk=iphoneos*][target=App] = Apple Distribution
-          PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = XeGhep
+          # 1. Tạo file xcconfig chuẩn để khóa cấu hình signing cho App chính
+          cat <<EOF > export.xcconfig
+          CODE_SIGN_STYLE = Manual
+          DEVELOPMENT_TEAM = HK58UX9N3D
+          CODE_SIGN_IDENTITY = Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER = ${PP_NAME}
           EOF
 
-          # 2. Archive ứng dụng sử dụng file cấu hình overrides
+          # 2. Archive ứng dụng
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     -xcconfig overrides.xcconfig \
+                     -xcconfig export.xcconfig \
+                     CODE_SIGN_STYLE="Manual" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     PROVISIONING_PROFILE_SPECIFIER="${PP_NAME}" \
+                     DEVELOPMENT_TEAM="HK58UX9N3D" \
                      archive
 
-          # 3. Export ra file .ipa chuẩn
+          # 3. Export IPA từ Archive
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
