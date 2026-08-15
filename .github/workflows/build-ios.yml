@@ -130,26 +130,24 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA (FIX TRIỆT ĐỂ LỖI SPM PACKAGES)
+      # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA (FIX DỨT ĐIỂM SPM PACKAGES)
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          # 1. Tạo file config tạm để CHỈ sign cho Target chính, không bị dính sang Firebase/GoogleUtilities
-          cat <<EOF > ci_signing.xcconfig
-          CODE_SIGN_STYLE = Manual
-          CODE_SIGN_IDENTITY = Apple Distribution
-          DEVELOPMENT_TEAM = HK58UX9N3D
-          PROVISIONING_PROFILE_SPECIFIER = ${PP_NAME}
-          PROVISIONING_PROFILE = ${PP_UUID}
-          EOF
+          # 1. Ép các SPM target/Dependencies không sử dụng Provisioning Profile
+          find ios/App/App.xcodeproj -name "project.pbxproj" -exec sed -i '' '/PROVISIONING_PROFILE_SPECIFIER = XeGhep;/d' {} +
+          find ios/App/App.xcodeproj -name "project.pbxproj" -exec sed -i '' '/PROVISIONING_PROFILE =/d' {} +
 
-          # 2. Archive ứng dụng sử dụng file config trên
+          # 2. Archive chỉ áp dụng Manual signing cho Target App chính thông qua xcodebuild
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     -xcconfig ci_signing.xcconfig \
+                     CODE_SIGN_STYLE="Manual" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     DEVELOPMENT_TEAM="HK58UX9N3D" \
+                     "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App]"="${PP_NAME}" \
                      archive
 
           # 3. Export ra file .ipa chuẩn
