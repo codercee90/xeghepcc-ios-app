@@ -130,7 +130,7 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (SỬA TRỰC TIẾP PROJECT SETTINGS)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐỒNG BỘ CHỮ KÝ FRAMEWORKS)
       # =========================================================================
       - name: Build and Export IPA
         run: |
@@ -144,22 +144,24 @@ jobs:
           sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Distribution";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
 
-          # 2. Reset cấu hình signing riêng của các SPM package/framework con để không bị dính profile
-          cat <<EOF > disable_spm_signing.xcconfig
-          CODE_SIGNING_ALLOWED = NO
-          CODE_SIGNING_REQUIRED = NO
+          # 2. Tạo config ép tất cả các Framework/Target con bắt buộc ký bằng Apple Distribution
+          cat <<EOF > force_distribution.xcconfig
+          CODE_SIGN_IDENTITY = Apple Distribution
+          EXPANDED_CODE_SIGN_IDENTITY = Apple Distribution
+          DEVELOPMENT_TEAM = HK58UX9N3D
+          CODE_SIGN_STYLE = Manual
           EOF
 
-          # 3. Archive với cấu hình đã làm sạch
+          # 3. Archive với cấu hình ép chữ ký đồng bộ
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     -xcconfig disable_spm_signing.xcconfig \
+                     -xcconfig force_distribution.xcconfig \
                      archive
 
-          # 4. Export IPA chuẩn TestFlight
+          # 4. Export IPA chuẩn
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
