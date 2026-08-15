@@ -105,7 +105,7 @@ jobs:
       # =========================================================================
       - name: Create ExportOptions.plist
         run: |
-          # Lưu ý: Thay com.yourcompany.yourapp bằng đúng Bundle Identifier trong dự án iOS của bạn
+          # Bắt buộc thay "com.yourcompany.yourapp" bằng đúng Bundle Identifier của app bạn
           BUNDLE_ID="cc.xeghep.www.ios" 
 
           cat <<EOF > ExportOptions.plist
@@ -131,7 +131,6 @@ jobs:
               <key>teamID</key>
               <string>HK58UX9N3D</string>
           </dict>
-          </plist>
           EOF
 
       # =========================================================================
@@ -139,19 +138,16 @@ jobs:
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          # Bước A: Archive ứng dụng (Cho phép ký Code Sign với Provisioning Profile đã tạo)
+          # Bước A: Archive ứng dụng (chỉ chỉ định cho target chính 'App', không ép profile lên các dependencies)
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     PROVISIONING_PROFILE_SPECIFIER="$PP_NAME" \
-                     DEVELOPMENT_TEAM="HK58UX9N3D" \
+                     CODE_SIGNING_ALLOWED=NO \
                      archive
 
-          # Bước B: Export ra file .ipa chuẩn
+          # Bước B: Export ra file .ipa chuẩn (bước này sẽ tự ký code chuẩn xác bằng ExportOptions.plist)
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
