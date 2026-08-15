@@ -61,7 +61,7 @@ jobs:
         run: |
           cd ios/App
           # Cập nhật Marketing Version
-          xcrun agvtool new-marketing-version "1.8"
+          xcrun agvtool new-marketing-version "1.9"
           
           # Tự động gán Build Number theo số lần chạy workflow trên GitHub
           xcrun agvtool new-version -all "${{ github.run_number }}"
