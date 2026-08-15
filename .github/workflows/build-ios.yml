@@ -213,15 +213,21 @@ jobs:
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          # Đưa Private Key thành 1 dòng để truyền vào JSON
-          KEY_CONTENT=$(echo "$PRIVATE_KEY" | tr -d '\r')
-        
+          # 1. Tạo file AuthKey.p8 tạm thời từ Base64 Secret
+          echo "$PRIVATE_KEY_BASE64" | base64 --decode > AuthKey.p8
+
+          # 2. Chạy upload_to_testflight với api_key_path
           fastlane run upload_to_testflight \
-          api_key:"{\"key_id\",\"$KEY_ID\",\"issuer_id\",\"$ISSUER_ID\",\"key\",\"$KEY_CONTENT\",\"is_key_content_base64\":true}" \
           ipa:"build/output/App.ipa" \
+          key_id:"$KEY_ID" \
+          issuer_id:"$ISSUER_ID" \
+          api_key_path:"AuthKey.p8" \
           skip_waiting_for_build_processing:false \
           uses_non_exempt_encryption:false \
           groups:"Testers" \
           changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
+
+          # 3. Dọn dẹp file key tạm
+          rm -f AuthKey.p8
