@@ -50,14 +50,8 @@ jobs:
           fi
 
       # =========================================================================
-      # 3. CẶP NHẬT COCOAPODS & VERSION
+      # 3. TỰ ĐỘNG CẬP NHẬT VERSION VÀ BUILD NUMBER
       # =========================================================================
-      - name: Install CocoaPods Dependencies
-        run: |
-          cd ios/App
-          pod install || pod update
-          cd ../..
-
       - name: Update Version and Build Number
         run: |
           cd ios/App
@@ -107,7 +101,7 @@ jobs:
       # =========================================================================
       - name: Create ExportOptions.plist
         run: |
-          # ⚠️ Nhớ sửa "com.yourcompany.yourapp" thành đúng Bundle Identifier của ứng dụng!
+          # ⚠️ Nhớ thay "com.yourcompany.yourapp" bằng đúng Bundle Identifier của app!
           BUNDLE_ID="cc.xeghep.www.ios" 
 
           python3 -c "
@@ -115,7 +109,6 @@ jobs:
 
           data = {
               'method': 'app-store',
-              'destination': 'export',
               'signingStyle': 'manual',
               'signingCertificate': 'Apple Distribution',
               'provisioningProfiles': {
@@ -131,18 +124,17 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD WORKSPACE VÀ EXPORT IPA
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          # Dùng -workspace thay vì -project để gom đủ Pods và nguồn web
-          xcodebuild clean archive \
-                     -workspace ios/App/App.xcworkspace \
+          xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     CODE_SIGNING_ALLOWED=NO
+                     CODE_SIGNING_ALLOWED=NO \
+                     archive
 
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
@@ -175,14 +167,3 @@ jobs:
             --file "$IPA_PATH" \
             --username "$APPLE_ID" \
             --password "$APP_PASSWORD"
-
-      # =========================================================================
-      # 8. UPLOAD IPA LÊN TESTFLIGHT (Sử dụng Action chuẩn hiện đại)
-      # =========================================================================
-#      - name: Upload IPA to TestFlight
-#        uses: apple-actions/upload-testflight-build@v1
-#        with:
-#          app-path: 'build/output/App.ipa' # Hoặc file .ipa xuất ra trong folder build/output
-#          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-#          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-#          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
