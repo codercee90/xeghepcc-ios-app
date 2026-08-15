@@ -175,7 +175,7 @@ jobs:
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
           CODE_SIGN_STYLE = Manual
-          PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = $PP_NAME
+          PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = ${PP_NAME}
           EOF
 
           # 3. Archive ứng dụng
