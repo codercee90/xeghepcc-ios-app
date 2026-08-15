@@ -113,8 +113,8 @@ jobs:
           import plistlib
 
           data = {
-              'method': 'app-store-connect',
-              'destination': 'upload',
+              'method': 'app-store',
+              'destination': 'export',
               'signingStyle': 'manual',
               'signingCertificate': 'Apple Distribution',
               'provisioningProfiles': {
