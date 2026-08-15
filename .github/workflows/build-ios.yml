@@ -142,6 +142,7 @@ jobs:
                      -archivePath build/App.xcarchive \
                      DEVELOPMENT_TEAM="HK58UX9N3D" \
                      CODE_SIGN_STYLE=Manual \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
                      PROVISIONING_PROFILE_SPECIFIER="${PP_NAME}" \
                      archive
 
