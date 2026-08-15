@@ -74,9 +74,17 @@ jobs:
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
           echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > $PP_PATH
 
+          # Extract UUID & Name của Provisioning Profile để dùng ở bước sau nếu cần
+          PP_UUID=$(security cms -D -i $PP_PATH | xmllint --xpath '//key[text()="UUID"]/following-sibling::string[1]/text()' -)
+          PP_NAME=$(security cms -D -i $PP_PATH | xmllint --xpath '//key[text()="Name"]/following-sibling::string[1]/text()' -)
+          
+          # Xuất UUID & Name ra environment variable
+          echo "PP_UUID=$PP_UUID" >> $GITHUB_ENV
+          echo "PP_NAME=$PP_NAME" >> $GITHUB_ENV
+
           # Copy Profile vào thư mục hệ thống mặc định của macOS Runner
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$PP_UUID.mobileprovision
 
           # Tạo Keychain tạm thời
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
@@ -97,17 +105,25 @@ jobs:
       # =========================================================================
       - name: Create ExportOptions.plist
         run: |
+          # Lưu ý: Thay com.yourcompany.yourapp bằng đúng Bundle Identifier trong dự án iOS của bạn
+          BUNDLE_ID="cc.xeghep.www.ios" 
+
           cat <<EOF > ExportOptions.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
               <key>method</key>
-              <string>app-store-connect</string>
+              <string>app-store</string>
               <key>signingStyle</key>
               <string>manual</string>
               <key>signingCertificate</key>
               <string>Apple Distribution</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>${BUNDLE_ID}</key>
+                  <string>${PP_NAME}</string>
+              </dict>
               <key>stripSwiftSymbols</key>
               <true/>
               <key>uploadSymbols</key>
@@ -123,18 +139,17 @@ jobs:
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          # Bước A: Archive ứng dụng
+          # Bước A: Archive ứng dụng (Cho phép ký Code Sign với Provisioning Profile đã tạo)
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     CODE_SIGN_IDENTITY="" \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_ALLOWED=NO \
+                     PROVISIONING_PROFILE_SPECIFIER="$PP_NAME" \
+                     DEVELOPMENT_TEAM="HK58UX9N3D" \
                      archive
 
-          # Bước B: Export ra file .ipa chuẩn (Tự động ký code và đóng gói chuẩn Apple)
+          # Bước B: Export ra file .ipa chuẩn
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
@@ -158,7 +173,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APP_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
         run: |
-          # Tự động tìm file .ipa trong thư mục output
           IPA_PATH=$(find build/output -name "*.ipa" | head -n 1)
           
           echo "Uploading $IPA_PATH to TestFlight..."
