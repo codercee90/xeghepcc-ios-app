@@ -30,19 +30,17 @@ jobs:
           npm ci || npm install
           npm install @capacitor-community/background-geolocation @capacitor-firebase/messaging --save || true
 
-      - name: Build Web App & Sync Capacitor
-        run: |
-          npm run build
-          ls -la
-          npx cap add ios || true
-          npx cap copy ios
-          npx cap sync ios
+      - name: Build Web App
+        run: npm run build --if-present
 
       - name: Create GoogleService-Info.plist
         run: |
           mkdir -p ios/App/App
           echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
 
+      # =========================================================================
+      # TỰ ĐỘNG BỎ QUA XÁC NHẬN MISSING COMPLIANCE
+      # =========================================================================
       - name: Add Export Compliance Flag to Info.plist
         run: |
           PLIST_PATH="ios/App/App/Info.plist"
@@ -51,13 +49,21 @@ jobs:
             /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$PLIST_PATH"
           fi
 
+      - name: Capacitor Sync iOS
+        run: |
+          npx cap add ios || true
+          npx cap sync ios
+
       # =========================================================================
       # 3. TỰ ĐỘNG CẬP NHẬT VERSION VÀ BUILD NUMBER
       # =========================================================================
       - name: Update Version and Build Number
         run: |
           cd ios/App
+          # Cập nhật Marketing Version
           xcrun agvtool new-marketing-version "1.9"
+          
+          # Tự động gán Build Number theo số lần chạy workflow trên GitHub
           xcrun agvtool new-version -all "${{ github.run_number }}"
           cd ../..
 
@@ -75,81 +81,82 @@ jobs:
           PP_PATH=$RUNNER_TEMP/embedded.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
+          # Decode Base64 thành file nhị phân
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
           echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > $PP_PATH
 
+          # Extract UUID & Name của Provisioning Profile để dùng ở bước sau nếu cần
           PP_UUID=$(security cms -D -i $PP_PATH | xmllint --xpath '//key[text()="UUID"]/following-sibling::string[1]/text()' -)
           PP_NAME=$(security cms -D -i $PP_PATH | xmllint --xpath '//key[text()="Name"]/following-sibling::string[1]/text()' -)
           
+          # Xuất UUID & Name ra environment variable
           echo "PP_UUID=$PP_UUID" >> $GITHUB_ENV
           echo "PP_NAME=$PP_NAME" >> $GITHUB_ENV
 
+          # Copy Profile vào thư mục hệ thống mặc định của macOS Runner
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$PP_UUID.mobileprovision
 
+          # Tạo Keychain tạm thời
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 3600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
+          # Import Apple WWDR Certificates (Root CA)
           curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
           security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH
 
+          # Import file .p12 vào Keychain
           security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security default-keychain -s $KEYCHAIN_PATH
 
       # =========================================================================
-      # 5. TẠO FILE EXPORTOPTIONS.PLIST ĐẦY ĐỦ CẤU HÌNH KÝ (FIX LỖI 3MB)
+      # 5. TẠO FILE EXPORTOPTIONS.PLIST ĐỂ XUẤT IPA
       # =========================================================================
       - name: Create ExportOptions.plist
         run: |
-          # ⚠️ Nhớ thay đúng Bundle ID của ứng dụng bạn (ví dụ: com.xeghep.app)
-          BUNDLE_ID="cc.xeghep.www.ios"
+          # ⚠️ LƯU Ý: Thay "com.yourcompany.yourapp" bằng đúng Bundle Identifier của app bạn
+          BUNDLE_ID="cc.xeghep.www.ios" 
 
           python3 -c "
           import plistlib
 
           data = {
-              'method': 'app-store',
+              'method': 'app-store-connect',
+              'destination': 'export',
               'signingStyle': 'manual',
               'signingCertificate': 'Apple Distribution',
-              'installerSigningCertificate': 'Apple Distribution',
               'provisioningProfiles': {
                   '${BUNDLE_ID}': '${PP_NAME}'
               },
               'stripSwiftSymbols': True,
               'uploadSymbols': True,
-              'manageAppVersionAndBuildNumber': False,
               'teamID': 'HK58UX9N3D'
           }
 
           with open('ExportOptions.plist', 'wb') as f:
               plistlib.dump(data, f)
           "
+          
+          echo "=== Kiem tra noi dung file ExportOptions.plist ==="
+          cat ExportOptions.plist
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐÃ TRUYỀN ĐỦ TEAM ID VÀ PROFILE)
+      # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA ĐÚNG CHUẨN XCODE
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          # 1. Archive và chỉ định trực tiếp Team ID + Provisioning Profile Name
-          xcodebuild clean archive \
-                     -project ios/App/App.xcodeproj \
+          # Bước A: Archive ứng dụng
+          xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     DEVELOPMENT_TEAM="HK58UX9N3D" \
-                     CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     PROVISIONING_PROFILE_SPECIFIER="$PP_NAME" \
-                     OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
-                     COMPILER_INDEX_STORE_ENABLE=NO \
+                     CODE_SIGNING_ALLOWED=NO \
                      archive
 
-          # 2. Export Archive ra file IPA
+          # Bước B: Export ra file .ipa chuẩn
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
@@ -181,3 +188,14 @@ jobs:
             --file "$IPA_PATH" \
             --username "$APPLE_ID" \
             --password "$APP_PASSWORD"
+
+      # =========================================================================
+      # 8. UPLOAD IPA LÊN TESTFLIGHT (Sử dụng Action chuẩn hiện đại)
+      # =========================================================================
+#      - name: Upload IPA to TestFlight
+#        uses: apple-actions/upload-testflight-build@v1
+#        with:
+#          app-path: 'build/output/App.ipa' # Hoặc file .ipa xuất ra trong folder build/output
+#          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+#          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+#          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
