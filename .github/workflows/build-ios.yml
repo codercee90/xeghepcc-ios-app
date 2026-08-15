@@ -215,14 +215,13 @@ jobs:
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          # 1. Tạo file api_key.json chuẩn bằng Node.js (chống vỡ dòng)
+          # 1. Tạo file api_key.json chuẩn đọc trực tiếp Private Key
           node -e '
           const fs = require("fs");
           const config = {
             key_id: process.env.KEY_ID,
             issuer_id: process.env.ISSUER_ID,
-            key: process.env.PRIVATE_KEY,
-            is_key_content_base64: true
+            key: process.env.PRIVATE_KEY
           };
           fs.writeFileSync("api_key.json", JSON.stringify(config, null, 2));
           '
