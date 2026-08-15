@@ -105,40 +105,37 @@ jobs:
       # =========================================================================
       - name: Create ExportOptions.plist
         run: |
-          # Bắt buộc thay "com.yourcompany.yourapp" bằng đúng Bundle Identifier của app bạn
+          # ⚠️ LƯU Ý: Thay "com.yourcompany.yourapp" bằng đúng Bundle Identifier của app bạn
           BUNDLE_ID="cc.xeghep.www.ios" 
 
-          cat <<EOF > ExportOptions.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>app-store</string>
-              <key>signingStyle</key>
-              <string>manual</string>
-              <key>signingCertificate</key>
-              <string>Apple Distribution</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                  <key>${BUNDLE_ID}</key>
-                  <string>${PP_NAME}</string>
-              </dict>
-              <key>stripSwiftSymbols</key>
-              <true/>
-              <key>uploadSymbols</key>
-              <true/>
-              <key>teamID</key>
-              <string>HK58UX9N3D</string>
-          </dict>
-          EOF
+          python3 -c "
+          import plistlib
+
+          data = {
+              'method': 'app-store-connect',
+              'signingStyle': 'manual',
+              'signingCertificate': 'Apple Distribution',
+              'provisioningProfiles': {
+                  '${BUNDLE_ID}': '${PP_NAME}'
+              },
+              'stripSwiftSymbols': True,
+              'uploadSymbols': True,
+              'teamID': 'HK58UX9N3D'
+          }
+
+          with open('ExportOptions.plist', 'wb') as f:
+              plistlib.dump(data, f)
+          "
+          
+          echo "=== Kiem tra noi dung file ExportOptions.plist ==="
+          cat ExportOptions.plist
 
       # =========================================================================
       # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA ĐÚNG CHUẨN XCODE
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          # Bước A: Archive ứng dụng (chỉ chỉ định cho target chính 'App', không ép profile lên các dependencies)
+          # Bước A: Archive ứng dụng
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
@@ -147,7 +144,7 @@ jobs:
                      CODE_SIGNING_ALLOWED=NO \
                      archive
 
-          # Bước B: Export ra file .ipa chuẩn (bước này sẽ tự ký code chuẩn xác bằng ExportOptions.plist)
+          # Bước B: Export ra file .ipa chuẩn
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
