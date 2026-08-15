@@ -130,24 +130,30 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA (FIX DỨT ĐIỂM SPM PACKAGES)
+      # 6. BUILD ARCHIVE VÀ EXPORT FILE IPA (FIX TRIỆT ĐỂ BẰNG XCCONFIG)
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          # 1. Ép các SPM target/Dependencies không sử dụng Provisioning Profile
-          find ios/App/App.xcodeproj -name "project.pbxproj" -exec sed -i '' '/PROVISIONING_PROFILE_SPECIFIER = XeGhep;/d' {} +
-          find ios/App/App.xcodeproj -name "project.pbxproj" -exec sed -i '' '/PROVISIONING_PROFILE =/d' {} +
+          # 1. Tạo file overrides.xcconfig để ép buộc quy tắc signing
+          cat <<'EOF' > overrides.xcconfig
+          // Reset cấu hình mặc định cho tất cả các target
+          CODE_SIGN_STYLE = Automatic
+          PROVISIONING_PROFILE_SPECIFIER =
+          
+          // Chỉ áp dụng Manual signing và Profile XeGhep cho target App chính
+          CODE_SIGN_STYLE[sdk=iphoneos*][target=App] = Manual
+          DEVELOPMENT_TEAM[sdk=iphoneos*][target=App] = HK58UX9N3D
+          CODE_SIGN_IDENTITY[sdk=iphoneos*][target=App] = Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = XeGhep
+          EOF
 
-          # 2. Archive chỉ áp dụng Manual signing cho Target App chính thông qua xcodebuild
+          # 2. Archive ứng dụng sử dụng file cấu hình overrides
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     DEVELOPMENT_TEAM="HK58UX9N3D" \
-                     "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App]"="${PP_NAME}" \
+                     -xcconfig overrides.xcconfig \
                      archive
 
           # 3. Export ra file .ipa chuẩn
