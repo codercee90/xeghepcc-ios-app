@@ -130,36 +130,40 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (KÍCH HOẠT PUSH NOTIFICATION NATIVE)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (INJECT ENTITLEMENTS CHUẨN XCODE)
       # =========================================================================
       - name: Build and Export IPA
         run: |
           PBXPROJ_PATH="ios/App/App.xcodeproj/project.pbxproj"
 
-          # 1. Ép cấu hình Manual & Team/Identity
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ_PATH"
-          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
-          sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
-          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Distribution";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
-          sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = HK58UX9N3D;/g" "$PBXPROJ_PATH"
-
-          # 2. Dùng Python inject CODE_SIGN_ENTITLEMENTS vào TẤT CẢ các build configuration của Target App
+          # 1. Dùng Python inject CODE_SIGN_ENTITLEMENTS chuẩn vào mọi block XCBuildConfiguration
           python3 -c "
+          import re
+
           with open('$PBXPROJ_PATH', 'r') as f:
               content = f.read()
 
-          # Sửa/thêm CODE_SIGN_ENTITLEMENTS
-          if 'CODE_SIGN_ENTITLEMENTS' in content:
-              import re
-              content = re.sub(r'CODE_SIGN_ENTITLEMENTS = [^;]+;', 'CODE_SIGN_ENTITLEMENTS = App/App.entitlements;', content)
-          else:
-              content = content.replace('PRODUCT_NAME = App;', 'PRODUCT_NAME = App;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;')
+          # Sửa CodeSignStyle & Identities
+          content = re.sub(r'CODE_SIGN_STYLE = Automatic;', 'CODE_SIGN_STYLE = Manual;', content)
+          content = re.sub(r'CODE_SIGN_IDENTITY = \"[^\"]*\";', 'CODE_SIGN_IDENTITY = \"Apple Distribution\";', content)
+          content = re.sub(r'DEVELOPMENT_TEAM = [^;]*;', 'DEVELOPMENT_TEAM = HK58UX9N3D;', content)
+
+          # Ép CODE_SIGN_ENTITLEMENTS vào TẤT CẢ các section buildSettings
+          def add_entitlements(match):
+              block = match.group(0)
+              if 'CODE_SIGN_ENTITLEMENTS' in block:
+                  return re.sub(r'CODE_SIGN_ENTITLEMENTS = [^;]+;', 'CODE_SIGN_ENTITLEMENTS = App/App.entitlements;', block)
+              else:
+                  return block.replace('buildSettings = {', 'buildSettings = {\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;')
+
+          # Thay thế trong tất cả khối buildSettings
+          content = re.sub(r'buildSettings = \{[^}]*\}', add_entitlements, content, flags=re.DOTALL)
 
           with open('$PBXPROJ_PATH', 'w') as f:
               f.write(content)
           "
 
-          # 3. Tạo xcconfig ép Profile cho riêng Target App (tránh dính SPM Packages)
+          # 2. Tạo xcconfig ép Profile chuẩn cho Target App chính (Tránh dính SPM)
           cat <<EOF > app_signing.xcconfig
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
@@ -167,7 +171,7 @@ jobs:
           PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = ${PP_NAME}
           EOF
 
-          # 4. Archive ứng dụng
+          # 3. Archive ứng dụng
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
@@ -176,7 +180,7 @@ jobs:
                      -xcconfig app_signing.xcconfig \
                      archive
 
-          # 5. Export IPA
+          # 4. Export IPA
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
@@ -212,25 +216,25 @@ jobs:
       # =========================================================================
       # 8. UPLOAD IPA LÊN TESTFLIGHT & PHÂN PHỐI TỰ ĐỘNG
       # =========================================================================
-      - name: Upload IPA to TestFlight
-        uses: apple-actions/upload-testflight-build@v1
-        with:
-          # Tìm file .ipa được tạo ra trong thư mục output
-          app-path: 'build/output/App.ipa'
-
-          # Khai báo các Secrets của App Store Connect API
-          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-
-          # Tự động gán bản build cho nhóm Testers
-          groups: 'Testers'
-
-          # Khai báo thông tin mô tả những điểm mới trong phiên bản (What to Test)
-          whats-new: 'Bản cập nhật tính năng mới và sửa các lỗi tồn đọng.'
-
-          # Tự động gửi thông báo qua email cho Tester trong nhóm ngay khi xử lý xong
-          notify-external-testers: true
-
-          # Tự động xử lý phần xác minh mã hóa để không bị kẹt trạng thái Waiting
-          distributed-for-encryption: false
+#      - name: Upload IPA to TestFlight
+#        uses: apple-actions/upload-testflight-build@v1
+#        with:
+#          # Tìm file .ipa được tạo ra trong thư mục output
+#          app-path: 'build/output/App.ipa'
+#
+#          # Khai báo các Secrets của App Store Connect API
+#          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+#          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+#          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+#
+#          # Tự động gán bản build cho nhóm Testers
+#          groups: 'Testers'
+#
+#          # Khai báo thông tin mô tả những điểm mới trong phiên bản (What to Test)
+#          whats-new: 'Bản cập nhật tính năng mới và sửa các lỗi tồn đọng.'
+#
+#          # Tự động gửi thông báo qua email cho Tester trong nhóm ngay khi xử lý xong
+#          notify-external-testers: true
+#
+#          # Tự động xử lý phần xác minh mã hóa để không bị kẹt trạng thái Waiting
+#          distributed-for-encryption: false
