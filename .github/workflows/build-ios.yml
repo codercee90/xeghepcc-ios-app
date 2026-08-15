@@ -99,12 +99,12 @@ jobs:
           security default-keychain -s $KEYCHAIN_PATH
 
       # =========================================================================
-      # 5. TẠO FILE EXPORTOPTIONS.PLIST ĐỂ XUẤT IPA
+      # 5. TẠO FILE EXPORTOPTIONS.PLIST ĐẦY ĐỦ CẤU HÌNH KÝ (FIX LỖI 3MB)
       # =========================================================================
       - name: Create ExportOptions.plist
         run: |
-          # ⚠️ Nhớ thay "com.yourcompany.yourapp" bằng đúng Bundle Identifier của app!
-          BUNDLE_ID="cc.xeghep.www.ios" 
+          # ⚠️ Nhớ thay đúng Bundle ID của ứng dụng bạn (ví dụ: com.xeghep.app)
+          BUNDLE_ID="cc.xeghep.www.ios"
 
           python3 -c "
           import plistlib
@@ -113,11 +113,13 @@ jobs:
               'method': 'app-store',
               'signingStyle': 'manual',
               'signingCertificate': 'Apple Distribution',
+              'installerSigningCertificate': 'Apple Distribution',
               'provisioningProfiles': {
                   '${BUNDLE_ID}': '${PP_NAME}'
               },
               'stripSwiftSymbols': True,
               'uploadSymbols': True,
+              'manageAppVersionAndBuildNumber': False,
               'teamID': 'HK58UX9N3D'
           }
 
@@ -126,19 +128,24 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA CÓ CHỮ KÝ CHUẨN TESTFLIGHT
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          xcodebuild -project ios/App/App.xcodeproj \
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # 1. Archive với cấu hình Release và ép ký đúng Keychain
+          xcodebuild clean archive \
+                     -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
+                     OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
                      COMPILER_INDEX_STORE_ENABLE=NO \
-                     CODE_SIGNING_ALLOWED=NO \
                      archive
 
+          # 2. Export Archive ra file IPA hoàn chỉnh
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
