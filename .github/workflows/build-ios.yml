@@ -81,16 +81,19 @@ jobs:
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
           echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > $PP_PATH
 
-          PP_UUID=$(security cms -D -i $PP_PATH | xmllint --xpath '//key[text()="UUID"]/following-sibling::string[1]/text()' -)
-          PP_NAME=$(security cms -D -i $PP_PATH | xmllint --xpath '//key[text()="Name"]/following-sibling::string[1]/text()' -)
+          # Đã sửa: Dùng PlistBuddy đọc trực tiếp từ CMS payload để tránh lỗi rỗng chuỗi
+          PP_NAME=$(security cms -D -i $PP_PATH | /usr/libexec/PlistBuddy -c "Print :Name" /dev/stdin)
+          PP_UUID=$(security cms -D -i $PP_PATH | /usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin)
           
           echo "PP_UUID=$PP_UUID" >> $GITHUB_ENV
           echo "PP_NAME=$PP_NAME" >> $GITHUB_ENV
 
+          echo "==> Loaded Profile Name: '$PP_NAME'"
+          echo "==> Loaded Profile UUID: '$PP_UUID'"
+
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$PP_UUID.mobileprovision
 
-          # Đã sửa: Khởi tạo Keychain & đưa vào keychain search list
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 3600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
@@ -168,15 +171,15 @@ jobs:
           end
           '
 
-          # 2. Đã sửa: Xóa cú pháp [target=App] không hợp lệ
+          # 2. Đã sửa: Sử dụng PROVISIONING_PROFILE_SPECIFIER trực tiếp để Xcode gán profile chuẩn xác
           cat <<EOF > app_signing.xcconfig
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
           CODE_SIGN_STYLE = Manual
-          PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*] = ${PP_NAME}
+          PROVISIONING_PROFILE_SPECIFIER = ${PP_NAME}
           EOF
 
-          # 3. Đã sửa: Sửa định dạng dòng xcodebuild archive
+          # 3. Archive ứng dụng
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
@@ -217,7 +220,7 @@ jobs:
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          # Đã sửa: Xử lý ký tự xuống dòng cho Private Key an toàn
+          # Xử lý ký tự xuống dòng cho Private Key an toàn
           node -e '
           const fs = require("fs");
           let rawKey = process.env.PRIVATE_KEY || "";
