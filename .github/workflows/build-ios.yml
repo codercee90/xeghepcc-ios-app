@@ -215,17 +215,19 @@ jobs:
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          # 1. Tạo file JSON chứa đầy đủ cấu hình App Store Connect API Key
-          cat <<EOF > api_key.json
-          {
-            "key_id": "$KEY_ID",
-            "issuer_id": "$ISSUER_ID",
-            "key": "$PRIVATE_KEY",
-            "is_key_content_base64": true
-          }
-          EOF
+          # 1. Tạo file api_key.json chuẩn bằng Node.js (chống vỡ dòng)
+          node -e '
+          const fs = require("fs");
+          const config = {
+            key_id: process.env.KEY_ID,
+            issuer_id: process.env.ISSUER_ID,
+            key: process.env.PRIVATE_KEY,
+            is_key_content_base64: true
+          };
+          fs.writeFileSync("api_key.json", JSON.stringify(config, null, 2));
+          '
 
-          # 2. Chạy Fastlane trỏ tới file JSON
+          # 2. Chạy Fastlane upload & phân phối
           fastlane run upload_to_testflight \
           api_key_path:"api_key.json" \
           ipa:"build/output/App.ipa" \
@@ -234,5 +236,5 @@ jobs:
           groups:"Testers" \
           changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
 
-          # 3. Dọn dẹp file key tạm
+          # 3. Dọn dẹp file tạm
           rm -f api_key.json
