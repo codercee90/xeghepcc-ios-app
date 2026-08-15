@@ -236,6 +236,7 @@ jobs:
           skip_waiting_for_build_processing:false \
           uses_non_exempt_encryption:false \
           groups:"Testers" \
-          changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
+          changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng." \
+          beta_app_description:"Ứng dụng thử nghiệm dành cho nhóm Testers."
 
           rm -f api_key.json
