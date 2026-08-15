@@ -207,16 +207,21 @@ jobs:
           retention-days: 7
 
       # =========================================================================
-      # 8. UPLOAD IPA LÊN TESTFLIGHT & PHÂN PHỐI TỰ ĐỘNG
+      # 8. UPLOAD IPA LÊN TESTFLIGHT & PHÂN PHỐI TỰ ĐỘNG (FASTLANE)
       # =========================================================================
-      - name: Upload IPA to TestFlight
-        uses: apple-actions/upload-testflight-build@v1
-        with:
-          app-path: 'build/output/App.ipa'
-          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          groups: 'Testers'
-          whats-new: 'Bản cập nhật tính năng mới và sửa các lỗi tồn đọng.'
-          notify-external-testers: true
-          distributed-for-encryption: false
+      - name: Upload and Distribute to TestFlight
+      env:
+        APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      run: |
+        fastlane run upload_to_testflight \
+          api_key_content:"$APP_STORE_CONNECT_PRIVATE_KEY" \
+          key_id:"$APP_STORE_CONNECT_KEY_ID" \
+          issuer_id:"$APP_STORE_CONNECT_ISSUER_ID" \
+          is_key_content_base64:true \
+          ipa:"build/output/App.ipa" \
+          skip_waiting_for_build_processing:false \
+          app_no_external_encryption:true \
+          groups:"Testers" \
+          changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
