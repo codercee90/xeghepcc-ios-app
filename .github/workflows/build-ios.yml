@@ -130,28 +130,29 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (CHỈ GÁN PROFILE CHO TARGET APP)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (LINK FILE ENTITLEMENTS CÓ SẴN)
       # =========================================================================
       - name: Build and Export IPA
         run: |
           PBXPROJ_PATH="ios/App/App.xcodeproj/project.pbxproj"
 
-          # 1. Chuyển CodeSignStyle sang Manual và đồng bộ chứng chỉ Distribution cho toàn bộ project
+          # 1. Ép cấu hình Manual & Team/Identity
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Distribution";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = HK58UX9N3D;/g" "$PBXPROJ_PATH"
 
-          # 2. Tạo xcconfig riêng CHỈ gán Provisioning Profile cho Target App chính (Tránh dính SPM)
+          # 2. Tạo xcconfig link đường dẫn tới file App.entitlements CÓ SẴN trên repo của bạn
           cat <<EOF > app_signing.xcconfig
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
           CODE_SIGN_STYLE = Manual
           PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = ${PP_NAME}
+          CODE_SIGN_ENTITLEMENTS = App/App.entitlements
           EOF
 
-          # 3. Archive với xcconfig tách biệt (KHÔNG truyền cờ profile trên CLI)
+          # 3. Archive với cấu hình xcconfig
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
@@ -160,7 +161,7 @@ jobs:
                      -xcconfig app_signing.xcconfig \
                      archive
 
-          # 4. Export IPA
+          # 4. Export IPA chuẩn TestFlight
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
