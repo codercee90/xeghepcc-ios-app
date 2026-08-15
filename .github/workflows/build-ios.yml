@@ -78,13 +78,14 @@ jobs:
           PP_PATH=$RUNNER_TEMP/embedded.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > $PP_PATH
+          # Xử lý làm sạch Base64 tránh lỗi khoảng trắng/xuống dòng trước khi decode
+          echo "$BUILD_CERTIFICATE_BASE64" | tr -d '\r\n ' | base64 --decode > $CERTIFICATE_PATH
+          echo "$BUILD_PROVISION_PROFILE_BASE64" | tr -d '\r\n ' | base64 --decode > $PP_PATH
 
-          # Đã sửa: Dùng PlistBuddy đọc trực tiếp từ CMS payload để tránh lỗi rỗng chuỗi
-          PP_NAME=$(security cms -D -i $PP_PATH | /usr/libexec/PlistBuddy -c "Print :Name" /dev/stdin)
-          PP_UUID=$(security cms -D -i $PP_PATH | /usr/libexec/PlistBuddy -c "Print :UUID" /dev/stdin)
-          
+          # Đọc Name và UUID trực tiếp từ nội dung decoded (Tránh phụ thuộc vào PlistBuddy/xmllint)
+          PP_NAME=$(security cms -D -i $PP_PATH | grep -A1 '<key>Name</key>' | grep '<string>' | sed -e 's/.*<string>//' -e 's/<\/string>.*//')
+          PP_UUID=$(security cms -D -i $PP_PATH | grep -A1 '<key>UUID</key>' | grep '<string>' | sed -e 's/.*<string>//' -e 's/<\/string>.*//')
+
           echo "PP_UUID=$PP_UUID" >> $GITHUB_ENV
           echo "PP_NAME=$PP_NAME" >> $GITHUB_ENV
 
@@ -171,7 +172,7 @@ jobs:
           end
           '
 
-          # 2. Đã sửa: Sử dụng PROVISIONING_PROFILE_SPECIFIER trực tiếp để Xcode gán profile chuẩn xác
+          # 2. Tạo xcconfig ép Profile cho ứng dụng
           cat <<EOF > app_signing.xcconfig
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
