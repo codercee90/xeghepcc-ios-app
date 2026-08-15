@@ -149,16 +149,34 @@ jobs:
         env:
           PP_NAME: ${{ env.PP_NAME }}
         run: |
-          # 1. Dùng Ruby thiết lập Signing duy nhất cho Target App (Bỏ qua SPM Targets)
+          # 1. Tạo file App.entitlements vật lý
+          mkdir -p ios/App/App
+          cat <<EOF > ios/App/App/App.entitlements
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>aps-environment</key>
+              <string>production</string>
+          </dict>
+          </plist>
+          EOF
+
+          # 2. Dùng Ruby add file vào xcodeproj và gán Entitlements chuẩn
           ruby -r xcodeproj -e '
-          project = Xcodeproj::Project.open("ios/App/App.xcodeproj")
+          project_path = "ios/App/App.xcodeproj"
+          project = Xcodeproj::Project.open(project_path)
           app_target = project.targets.find { |t| t.name == "App" }
 
           if app_target
-            puts "==> Dang thiet lap Signing duy nhat cho Target: #{app_target.name}"
+            puts "==> Dang thiet lap Signing va Entitlements cho Target: #{app_target.name}"
             
-            group = project.main_group["App"] || project.main_group
-            file_ref = group.find_file_by_path("App.entitlements") || group.new_file("App.entitlements")
+            # Thêm file reference vào Xcode Project nếu chưa có
+            app_group = project.main_group["App"] || project.main_group
+            file_ref = app_group.find_file_by_path("App.entitlements")
+            unless file_ref
+              file_ref = app_group.new_file("App/App.entitlements")
+            end
 
             app_target.build_configurations.each do |config|
               config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "App/App.entitlements"
@@ -175,7 +193,7 @@ jobs:
             exit 1
           end
           '
-
+          
           # 2. Archive ứng dụng (Không dùng xcconfig chung để tránh ảnh hưởng SPM)
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
@@ -198,45 +216,19 @@ jobs:
           fi
 
       # =========================================================================
-      # 7. UPLOAD IPA LÊN GITHUB ARTIFACTS
+      # 6.1 KIỂM TRA ENTITLEMENTS TRỰC TIẾP TRÊN GITHUB ACTIONS
       # =========================================================================
-      - name: Upload IPA to GitHub Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-build-signed-app
-          path: build/output/App.ipa
-          retention-days: 7
-
-      # =========================================================================
-      # 8. UPLOAD IPA LÊN TESTFLIGHT (FASTLANE)
-      # =========================================================================
-      - name: Upload and Distribute to TestFlight
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      - name: Verify IPA Entitlements
         run: |
-          node -e '
-          const fs = require("fs");
-          let rawKey = process.env.PRIVATE_KEY || "";
-          if (!rawKey.includes("\n")) {
-            rawKey = rawKey.replace(/\\n/g, "\n");
-          }
-          const config = {
-            key_id: process.env.KEY_ID,
-            issuer_id: process.env.ISSUER_ID,
-            key: rawKey
-          };
-          fs.writeFileSync("api_key.json", JSON.stringify(config, null, 2));
-          '
-
-          fastlane run upload_to_testflight \
-          api_key_path:"api_key.json" \
-          ipa:"build/output/App.ipa" \
-          skip_waiting_for_build_processing:false \
-          uses_non_exempt_encryption:false \
-          groups:"Testers" \
-          changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng." \
-          beta_app_description:"Ứng dụng thử nghiệm dành cho nhóm Testers."
-
-          rm -f api_key.json
+          unzip -q build/output/App.ipa -d temp_ipa
+          echo "==> ENTITLEMENTS TRONG BINARY:"
+          codesign -d --entitlements :- temp_ipa/Payload/App.app
+          
+          echo "==> KIỂM TRA PUSH NOTIFICATIONS:"
+          if codesign -d --entitlements :- temp_ipa/Payload/App.app | grep -q "aps-environment"; then
+            echo "SUCCESS: Da tim thấy aps-environment trong App!"
+          else
+            echo "ERROR: Vẫn chưa co aps-environment trong App!"
+            exit 1
+          fi
+          rm -rf temp_ipa
