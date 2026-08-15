@@ -130,32 +130,35 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (TÁCH BIỆT APPS VÀ FRAMEWORKS)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (SỬA TRỰC TIẾP PROJECT SETTINGS)
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          # 1. Tạo file xcconfig CHỈ ÁP DỤNG CHO TARGET APP
-          cat <<EOF > export.xcconfig
-          CODE_SIGN_STYLE[sdk=iphoneos*][target=App] = Manual
-          DEVELOPMENT_TEAM[sdk=iphoneos*][target=App] = HK58UX9N3D
-          CODE_SIGN_IDENTITY[sdk=iphoneos*][target=App] = Apple Distribution
-          PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = ${PP_NAME}
-          
-          // Đảm bảo các target con không dùng Profile
-          CODE_SIGN_STYLE = Automatic
-          PROVISIONING_PROFILE_SPECIFIER = 
+          PBXPROJ_PATH="ios/App/App.xcodeproj/project.pbxproj"
+
+          # 1. Ép chuyển toàn bộ CodeSignStyle sang Manual và gán Profile/Team chuẩn
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ_PATH"
+          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = \"[^\"]*\";/PROVISIONING_PROFILE_SPECIFIER = \"${PP_NAME}\";/g" "$PBXPROJ_PATH"
+          sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = HK58UX9N3D;/g" "$PBXPROJ_PATH"
+          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
+          sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
+
+          # 2. Reset cấu hình signing riêng của các SPM package/framework con để không bị dính profile
+          cat <<EOF > disable_spm_signing.xcconfig
+          CODE_SIGNING_ALLOWED = NO
+          CODE_SIGNING_REQUIRED = NO
           EOF
 
-          # 2. Archive (KHÔNG truyền cờ signing ở command line để tránh dính SPM)
+          # 3. Archive với cấu hình đã làm sạch
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     -xcconfig export.xcconfig \
+                     -xcconfig disable_spm_signing.xcconfig \
                      archive
 
-          # 3. Export IPA
+          # 4. Export IPA chuẩn TestFlight
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
