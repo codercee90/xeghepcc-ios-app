@@ -130,38 +130,33 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐỒNG BỘ CHỮ KÝ FRAMEWORKS)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐỒNG BỘ PROFILE CHÍNH XÁC)
       # =========================================================================
       - name: Build and Export IPA
         run: |
           PBXPROJ_PATH="ios/App/App.xcodeproj/project.pbxproj"
 
-          # 1. Ép chuyển toàn bộ CodeSignStyle sang Manual và gán Profile/Team chuẩn
+          # 1. Chuyển sang Manual và gán trực tiếp Profile Specifier / Team / Identity vào file project
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ_PATH"
-          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = \"[^\"]*\";/PROVISIONING_PROFILE_SPECIFIER = \"${PP_NAME}\";/g" "$PBXPROJ_PATH"
-          sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = HK58UX9N3D;/g" "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Distribution";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
+          sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = HK58UX9N3D;/g" "$PBXPROJ_PATH"
+          sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = \"${PP_NAME}\";/g" "$PBXPROJ_PATH"
 
-          # 2. Tạo config ép tất cả các Framework/Target con bắt buộc ký bằng Apple Distribution
-          cat <<EOF > force_distribution.xcconfig
-          CODE_SIGN_IDENTITY = Apple Distribution
-          EXPANDED_CODE_SIGN_IDENTITY = Apple Distribution
-          DEVELOPMENT_TEAM = HK58UX9N3D
-          CODE_SIGN_STYLE = Manual
-          EOF
-
-          # 3. Archive với cấu hình ép chữ ký đồng bộ
+          # 2. Archive ứng dụng (Truyền cờ ép chứng chỉ Distribution để đồng bộ Capacitor/Cordova)
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     -xcconfig force_distribution.xcconfig \
+                     CODE_SIGN_STYLE="Manual" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     PROVISIONING_PROFILE_SPECIFIER="${PP_NAME}" \
+                     DEVELOPMENT_TEAM="HK58UX9N3D" \
                      archive
 
-          # 4. Export IPA chuẩn
+          # 3. Export file IPA chuẩn
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
