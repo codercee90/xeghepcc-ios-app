@@ -128,24 +128,28 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA CÓ CHỮ KÝ CHUẨN TESTFLIGHT
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐÃ TRUYỀN ĐỦ TEAM ID VÀ PROFILE)
       # =========================================================================
       - name: Build and Export IPA
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # 1. Archive với cấu hình Release và ép ký đúng Keychain
+          # 1. Archive và chỉ định trực tiếp Team ID + Provisioning Profile Name
           xcodebuild clean archive \
                      -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
+                     DEVELOPMENT_TEAM="HK58UX9N3D" \
+                     CODE_SIGN_STYLE="Manual" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     PROVISIONING_PROFILE_SPECIFIER="$PP_NAME" \
                      OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
                      COMPILER_INDEX_STORE_ENABLE=NO \
                      archive
 
-          # 2. Export Archive ra file IPA hoàn chỉnh
+          # 2. Export Archive ra file IPA
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
