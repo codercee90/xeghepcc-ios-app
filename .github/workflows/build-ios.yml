@@ -90,9 +90,11 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$PP_UUID.mobileprovision
 
+          # Đã sửa: Khởi tạo Keychain & đưa vào keychain search list
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 3600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
 
           curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
           security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH
@@ -139,7 +141,7 @@ jobs:
           EOF
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (LINK ENTITLEMENTS CHUẨN RUBY XCODEPROJ)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA
       # =========================================================================
       - name: Build and Export IPA
         env:
@@ -148,14 +150,10 @@ jobs:
           # 1. Dùng Ruby can thiệp chính xác vào Target App để gán file Entitlements
           ruby -r xcodeproj -e '
           project = Xcodeproj::Project.open("ios/App/App.xcodeproj")
-
-          # Chỉ chọn Target ứng dụng chính (App), bỏ qua tất cả Swift Package Targets
           app_target = project.targets.find { |t| t.name == "App" }
 
           if app_target
             puts "==> Dang can thiep duy nhat vao Target: #{app_target.name}"
-
-            # Tao File Reference neu chua co
             group = project.main_group["App"] || project.main_group
             file_ref = group.find_file_by_path("App.entitlements") || group.new_file("App.entitlements")
 
@@ -170,22 +168,22 @@ jobs:
           end
           '
 
-          # 2. Tạo xcconfig ép Profile cho riêng Target App (Tránh dính các package SPM)
+          # 2. Đã sửa: Xóa cú pháp [target=App] không hợp lệ
           cat <<EOF > app_signing.xcconfig
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
           CODE_SIGN_STYLE = Manual
-          PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = ${PP_NAME}
+          PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*] = ${PP_NAME}
           EOF
 
-          # 3. Archive ứng dụng
+          # 3. Đã sửa: Sửa định dạng dòng xcodebuild archive
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
                      -xcconfig app_signing.xcconfig \
-                     archive \
+                     archive
 
           # 4. Export IPA
           xcodebuild -exportArchive \
@@ -193,7 +191,7 @@ jobs:
                      -exportOptionsPlist ExportOptions.plist \
                      -exportPath build/output
 
-          # 5. Đảm bảo file .ipa đầu ra luôn mang tên App.ipa chuẩn cho Bước 8
+          # 5. Đảm bảo file .ipa đầu ra luôn mang tên App.ipa
           cd build/output
           IPA_FILE=$(ls *.ipa | head -n 1)
           if [ "$IPA_FILE" != "App.ipa" ]; then
@@ -211,7 +209,7 @@ jobs:
           retention-days: 7
 
       # =========================================================================
-      # 8. UPLOAD IPA LÊN TESTFLIGHT & PHÂN PHỐI TỰ ĐỘNG (FASTLANE)
+      # 8. UPLOAD IPA LÊN TESTFLIGHT (FASTLANE)
       # =========================================================================
       - name: Upload and Distribute to TestFlight
         env:
@@ -219,18 +217,21 @@ jobs:
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          # 1. Tạo file api_key.json chuẩn đọc trực tiếp Private Key
+          # Đã sửa: Xử lý ký tự xuống dòng cho Private Key an toàn
           node -e '
           const fs = require("fs");
+          let rawKey = process.env.PRIVATE_KEY || "";
+          if (!rawKey.includes("\n")) {
+            rawKey = rawKey.replace(/\\n/g, "\n");
+          }
           const config = {
             key_id: process.env.KEY_ID,
             issuer_id: process.env.ISSUER_ID,
-            key: process.env.PRIVATE_KEY
+            key: rawKey
           };
           fs.writeFileSync("api_key.json", JSON.stringify(config, null, 2));
           '
 
-          # 2. Chạy Fastlane upload & phân phối
           fastlane run upload_to_testflight \
           api_key_path:"api_key.json" \
           ipa:"build/output/App.ipa" \
@@ -239,5 +240,4 @@ jobs:
           groups:"Testers" \
           changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
 
-          # 3. Dọn dẹp file tạm
           rm -f api_key.json
