@@ -124,6 +124,7 @@ jobs:
 
           data = {
               'method': 'app-store-connect',
+              'destination': 'export',
               'signingStyle': 'manual',
               'signingCertificate': 'Apple Distribution',
               'provisioningProfiles': {
