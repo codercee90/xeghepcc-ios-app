@@ -130,40 +130,26 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (INJECT ENTITLEMENTS CHUẨN XCODE)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (LINK ENTITLEMENTS CHUẨN RUBY XCODEPROJ)
       # =========================================================================
       - name: Build and Export IPA
         run: |
-          PBXPROJ_PATH="ios/App/App.xcodeproj/project.pbxproj"
+          # 1. Dùng Ruby can thiệp chính xác vào Target App để gán file Entitlements
+          ruby -r xcodeproj -e '
+            project = Xcodeproj::Project.open("ios/App/App.xcodeproj")
+            target = project.targets.find { |t| t.name == "App" }
+            
+            target.build_configurations.each do |config|
+              config.build_settings["CODE_SIGN_STYLE"] = "Manual"
+              config.build_settings["CODE_SIGN_IDENTITY"] = "Apple Distribution"
+              config.build_settings["DEVELOPMENT_TEAM"] = "HK58UX9N3D"
+              config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "App/App.entitlements"
+            end
+            
+            project.save
+          '
 
-          # 1. Dùng Python inject CODE_SIGN_ENTITLEMENTS chuẩn vào mọi block XCBuildConfiguration
-          python3 -c "
-          import re
-
-          with open('$PBXPROJ_PATH', 'r') as f:
-              content = f.read()
-
-          # Sửa CodeSignStyle & Identities
-          content = re.sub(r'CODE_SIGN_STYLE = Automatic;', 'CODE_SIGN_STYLE = Manual;', content)
-          content = re.sub(r'CODE_SIGN_IDENTITY = \"[^\"]*\";', 'CODE_SIGN_IDENTITY = \"Apple Distribution\";', content)
-          content = re.sub(r'DEVELOPMENT_TEAM = [^;]*;', 'DEVELOPMENT_TEAM = HK58UX9N3D;', content)
-
-          # Ép CODE_SIGN_ENTITLEMENTS vào TẤT CẢ các section buildSettings
-          def add_entitlements(match):
-              block = match.group(0)
-              if 'CODE_SIGN_ENTITLEMENTS' in block:
-                  return re.sub(r'CODE_SIGN_ENTITLEMENTS = [^;]+;', 'CODE_SIGN_ENTITLEMENTS = App/App.entitlements;', block)
-              else:
-                  return block.replace('buildSettings = {', 'buildSettings = {\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;')
-
-          # Thay thế trong tất cả khối buildSettings
-          content = re.sub(r'buildSettings = \{[^}]*\}', add_entitlements, content, flags=re.DOTALL)
-
-          with open('$PBXPROJ_PATH', 'w') as f:
-              f.write(content)
-          "
-
-          # 2. Tạo xcconfig ép Profile chuẩn cho Target App chính (Tránh dính SPM)
+          # 2. Tạo xcconfig ép Profile cho riêng Target App (Tránh dính các package SPM)
           cat <<EOF > app_signing.xcconfig
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
