@@ -45,7 +45,6 @@ jobs:
 
       # =========================================================================
       # TỰ ĐỘNG BỎ QUA XÁC NHẬN MISSING COMPLIANCE
-      # (Đã di chuyển xuống sau bước Capacitor Sync để tránh bị đè lại)
       # =========================================================================
       - name: Add Export Compliance Flag to Info.plist
         run: |
@@ -107,27 +106,35 @@ jobs:
       # =========================================================================
       - name: Create ExportOptions.plist
         run: |
-          BUNDLE_ID="cc.xeghep.www.ios" 
+          BUNDLE_ID="cc.xeghep.www.ios"
 
-          python3 -c "
-          import plistlib
-
-          data = {
-              'method': 'app-store',
-              'signingStyle': 'manual',
-              'signingCertificate': 'Apple Distribution',
-              'provisioningProfiles': {
-                  '${BUNDLE_ID}': '${PP_NAME}'
-              },
-              'stripSwiftSymbols': True,
-              'uploadSymbols': True,
-              'manageAppVersionAndBuildNumber': False,
-              'teamID': 'HK58UX9N3D'
-          }
-
-          with open('ExportOptions.plist', 'wb') as f:
-              plistlib.dump(data, f)
-          "
+          cat <<EOF > ExportOptions.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>HK58UX9N3D</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingCertificate</key>
+              <string>Apple Distribution</string>
+              <key>uploadSymbols</key>
+              <true/>
+              <key>stripSwiftSymbols</key>
+              <true/>
+              <key>manageAppVersionAndBuildNumber</key>
+              <false/>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>${BUNDLE_ID}</key>
+                  <string>${PP_NAME}</string>
+              </dict>
+          </dict>
+          </plist>
+          EOF
 
       # =========================================================================
       # 6. BUILD ARCHIVE VÀ EXPORT IPA (LINK ENTITLEMENTS CHUẨN RUBY XCODEPROJ)
@@ -172,6 +179,13 @@ jobs:
                      -exportOptionsPlist ExportOptions.plist \
                      -exportPath build/output
 
+          # 5. Đảm bảo file .ipa đầu ra luôn mang tên App.ipa chuẩn cho Bước 8
+          cd build/output
+          IPA_FILE=$(ls *.ipa | head -n 1)
+          if [ "$IPA_FILE" != "App.ipa" ]; then
+            mv "$IPA_FILE" App.ipa
+          fi
+
       # =========================================================================
       # 7. UPLOAD IPA LÊN GITHUB ARTIFACTS
       # =========================================================================
@@ -179,48 +193,20 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-signed-app
-          path: build/output/*.ipa
+          path: build/output/App.ipa
           retention-days: 7
-
-      # =========================================================================
-      # 8. UPLOAD IPA LÊN TESTFLIGHT VIA ALTOOL
-      # =========================================================================
-#      - name: Upload IPA to TestFlight
-#        env:
-#          APPLE_ID: ${{ secrets.APPLE_ID }}
-#          APP_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
-#        run: |
-#          IPA_PATH=$(find build/output -name "*.ipa" | head -n 1)
-#          
-#          echo "Uploading $IPA_PATH to TestFlight..."
-#          xcrun altool --upload-app \
-#            --type ios \
-#            --file "$IPA_PATH" \
-#            --username "$APPLE_ID" \
-#            --password "$APP_PASSWORD"
 
       # =========================================================================
       # 8. UPLOAD IPA LÊN TESTFLIGHT & PHÂN PHỐI TỰ ĐỘNG
       # =========================================================================
-#      - name: Upload IPA to TestFlight
-#        uses: apple-actions/upload-testflight-build@v1
-#        with:
-#          # Tìm file .ipa được tạo ra trong thư mục output
-#          app-path: 'build/output/App.ipa'
-#
-#          # Khai báo các Secrets của App Store Connect API
-#          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-#          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-#          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-#
-#          # Tự động gán bản build cho nhóm Testers
-#          groups: 'Testers'
-#
-#          # Khai báo thông tin mô tả những điểm mới trong phiên bản (What to Test)
-#          whats-new: 'Bản cập nhật tính năng mới và sửa các lỗi tồn đọng.'
-#
-#          # Tự động gửi thông báo qua email cho Tester trong nhóm ngay khi xử lý xong
-#          notify-external-testers: true
-#
-#          # Tự động xử lý phần xác minh mã hóa để không bị kẹt trạng thái Waiting
-#          distributed-for-encryption: false
+      - name: Upload IPA to TestFlight
+        uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: 'build/output/App.ipa'
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          groups: 'Testers'
+          whats-new: 'Bản cập nhật tính năng mới và sửa các lỗi tồn đọng.'
+          notify-external-testers: true
+          distributed-for-encryption: false
