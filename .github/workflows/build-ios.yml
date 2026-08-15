@@ -159,7 +159,7 @@ jobs:
           config.build_settings["CODE_SIGN_STYLE"] = "Manual"
           config.build_settings["CODE_SIGN_IDENTITY"] = "Apple Distribution"
           config.build_settings["DEVELOPMENT_TEAM"] = "HK58UX9N3D"
-          config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "#{target.name}/App.entitlements"
+          config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "$(SRCROOT)/App/App.entitlements"
           end
 
           project.save
@@ -170,6 +170,7 @@ jobs:
           cat <<EOF > app_signing.xcconfig
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
+          CODE_SIGN_ENTITLEMENTS = $(SRCROOT)/App/App.entitlements
           CODE_SIGN_STYLE = Manual
           PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = ${PP_NAME}
           EOF
