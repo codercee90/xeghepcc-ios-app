@@ -211,17 +211,14 @@ jobs:
       # =========================================================================
       - name: Upload and Distribute to TestFlight
         env:
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APP_STORE_CONNECT_API_KEY_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APP_STORE_CONNECT_API_KEY_IS_KEY_CONTENT_BASE64: "true"
         run: |
           fastlane run upload_to_testflight \
-          api_key_content:"$APP_STORE_CONNECT_PRIVATE_KEY" \
-          key_id:"$APP_STORE_CONNECT_KEY_ID" \
-          issuer_id:"$APP_STORE_CONNECT_ISSUER_ID" \
-          is_key_content_base64:true \
           ipa:"build/output/App.ipa" \
           skip_waiting_for_build_processing:false \
-          app_no_external_encryption:true \
+          uses_non_exempt_encryption:false \
           groups:"Testers" \
           changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
