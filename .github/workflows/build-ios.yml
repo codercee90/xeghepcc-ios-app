@@ -135,6 +135,8 @@ jobs:
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
+                     BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+                     ONLY_ACTIVE_ARCH=NO \
                      CODE_SIGNING_ALLOWED=NO \
                      archive
 
