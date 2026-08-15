@@ -210,12 +210,12 @@ jobs:
       # 8. UPLOAD IPA LÊN TESTFLIGHT & PHÂN PHỐI TỰ ĐỘNG (FASTLANE)
       # =========================================================================
       - name: Upload and Distribute to TestFlight
-      env:
-        APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-        APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-      run: |
-        fastlane run upload_to_testflight \
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          fastlane run upload_to_testflight \
           api_key_content:"$APP_STORE_CONNECT_PRIVATE_KEY" \
           key_id:"$APP_STORE_CONNECT_KEY_ID" \
           issuer_id:"$APP_STORE_CONNECT_ISSUER_ID" \
