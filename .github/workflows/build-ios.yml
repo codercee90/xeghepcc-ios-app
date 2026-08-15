@@ -106,8 +106,8 @@ jobs:
       # =========================================================================
       - name: Create ExportOptions.plist
         env:
-		  PP_NAME: ${{ env.PP_NAME }}
-		run: |
+          PP_NAME: ${{ env.PP_NAME }}
+        run: |
           BUNDLE_ID="cc.xeghep.www.ios"
 
           cat <<EOF > ExportOptions.plist
@@ -143,7 +143,7 @@ jobs:
       # =========================================================================
       - name: Build and Export IPA
         env:
-		  PP_NAME: ${{ env.PP_NAME }}
+          PP_NAME: ${{ env.PP_NAME }}
         run: |
           # 1. Dùng Ruby can thiệp chính xác vào Target App để gán file Entitlements
           ruby -r xcodeproj -e '
