@@ -130,29 +130,33 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐỒNG BỘ ENTITLEMENTS CHỈ CHO TARGET APP)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ÉP ENTITLEMENTS TRỰC TIẾP VÀO PBXPROJ)
       # =========================================================================
       - name: Build and Export IPA
         run: |
           PBXPROJ_PATH="ios/App/App.xcodeproj/project.pbxproj"
 
-          # 1. Ép cấu hình Manual & Team/Identity cho file project
+          # 1. Ép chuyển sang Manual & gán chứng chỉ Distribution / Team
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Distribution";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = HK58UX9N3D;/g" "$PBXPROJ_PATH"
 
-          # 2. Tạo đường dẫn tuyệt đối cho file App.entitlements
-          ENTITLEMENTS_PATH="$(pwd)/ios/App/App/App.entitlements"
+          # 2. Gán trực tiếp file App.entitlements vào file project.pbxproj bằng sed
+          sed -i '' 's|CODE_SIGN_ENTITLEMENTS = [^;]*;|CODE_SIGN_ENTITLEMENTS = App/App.entitlements;|g' "$PBXPROJ_PATH"
+          
+          # Nếu trong file pbxproj chưa từng có dòng CODE_SIGN_ENTITLEMENTS, ta chèn thêm vào
+          if ! grep -q "CODE_SIGN_ENTITLEMENTS" "$PBXPROJ_PATH"; then
+            sed -i '' 's/PRODUCT_NAME = App;/PRODUCT_NAME = App;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App\/App.entitlements;/g' "$PBXPROJ_PATH"
+          fi
 
-          # 3. Tạo xcconfig áp dụng Profile & Entitlements CHỈ cho Target App
+          # 3. Tạo xcconfig chỉ gán Provisioning Profile cho riêng Target App chính
           cat <<EOF > app_signing.xcconfig
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
           CODE_SIGN_STYLE = Manual
           PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*][target=App] = ${PP_NAME}
-          CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*][target=App] = ${ENTITLEMENTS_PATH}
           EOF
 
           # 4. Archive ứng dụng
