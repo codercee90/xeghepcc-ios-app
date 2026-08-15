@@ -130,28 +130,36 @@ jobs:
           "
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ÉP ENTITLEMENTS TRỰC TIẾP VÀO PBXPROJ)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (KÍCH HOẠT PUSH NOTIFICATION NATIVE)
       # =========================================================================
       - name: Build and Export IPA
         run: |
           PBXPROJ_PATH="ios/App/App.xcodeproj/project.pbxproj"
 
-          # 1. Ép chuyển sang Manual & gán chứng chỉ Distribution / Team
+          # 1. Ép cấu hình Manual & Team/Identity
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Distribution";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' "$PBXPROJ_PATH"
           sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = HK58UX9N3D;/g" "$PBXPROJ_PATH"
 
-          # 2. Gán trực tiếp file App.entitlements vào file project.pbxproj bằng sed
-          sed -i '' 's|CODE_SIGN_ENTITLEMENTS = [^;]*;|CODE_SIGN_ENTITLEMENTS = App/App.entitlements;|g' "$PBXPROJ_PATH"
-          
-          # Nếu trong file pbxproj chưa từng có dòng CODE_SIGN_ENTITLEMENTS, ta chèn thêm vào
-          if ! grep -q "CODE_SIGN_ENTITLEMENTS" "$PBXPROJ_PATH"; then
-            sed -i '' 's/PRODUCT_NAME = App;/PRODUCT_NAME = App;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App\/App.entitlements;/g' "$PBXPROJ_PATH"
-          fi
+          # 2. Dùng Python inject CODE_SIGN_ENTITLEMENTS vào TẤT CẢ các build configuration của Target App
+          python3 -c "
+          with open('$PBXPROJ_PATH', 'r') as f:
+              content = f.read()
 
-          # 3. Tạo xcconfig chỉ gán Provisioning Profile cho riêng Target App chính
+          # Sửa/thêm CODE_SIGN_ENTITLEMENTS
+          if 'CODE_SIGN_ENTITLEMENTS' in content:
+              import re
+              content = re.sub(r'CODE_SIGN_ENTITLEMENTS = [^;]+;', 'CODE_SIGN_ENTITLEMENTS = App/App.entitlements;', content)
+          else:
+              content = content.replace('PRODUCT_NAME = App;', 'PRODUCT_NAME = App;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App/App.entitlements;')
+
+          with open('$PBXPROJ_PATH', 'w') as f:
+              f.write(content)
+          "
+
+          # 3. Tạo xcconfig ép Profile cho riêng Target App (tránh dính SPM Packages)
           cat <<EOF > app_signing.xcconfig
           CODE_SIGN_IDENTITY = Apple Distribution
           DEVELOPMENT_TEAM = HK58UX9N3D
@@ -168,7 +176,7 @@ jobs:
                      -xcconfig app_signing.xcconfig \
                      archive
 
-          # 5. Export IPA chuẩn TestFlight
+          # 5. Export IPA
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
