@@ -141,7 +141,7 @@ jobs:
           EOF
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐÃ TỰ ĐỘNG KÝ FRAMEWORKS & PLUGINS)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (TỐI ƯU SIGNING VA ENTITLEMENTS)
       # =========================================================================
       - name: Build and Export IPA
         env:
@@ -160,23 +160,22 @@ jobs:
           </plist>
           EOF
 
-          # 2. Dùng Ruby cấu hình Signing & Entitlements cho Target App VÀ toàn bộ Frameworks/Plugins
+          # 2. Dùng Ruby cấu hình Manual Signing cho App Target và xóa Signing rác ở Plugin Target
           ruby -r xcodeproj -e '
           project_path = "ios/App/App.xcodeproj"
           project = Xcodeproj::Project.open(project_path)
           app_target = project.targets.find { |t| t.name == "App" }
 
           if app_target
-            puts "==> Dang thiet lap Signing va Entitlements cho App va Frameworks..."
-            
-            # Thêm file reference vào Xcode Project nếu chưa có
+            puts "==> Cấu hình Signing và Entitlements..."
+
+            # Thêm file reference vào Xcode Project nếu chưa xuất hiện
             app_group = project.main_group["App"] || project.main_group
             file_ref = app_group.find_file_by_path("App.entitlements")
             unless file_ref
-              file_ref = app_group.new_file("App/App.entitlements")
+              app_group.new_file("App/App.entitlements")
             end
 
-            # Ép cấu hình signing cho tất cả các Targets (App, Plugins, Frameworks)
             project.targets.each do |target|
               target.build_configurations.each do |config|
                 if target.name == "App"
@@ -187,36 +186,34 @@ jobs:
                   config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "App/App.entitlements"
                   config.build_settings["SKIP_INSTALL"] = "NO"
                 else
+                  # Bỏ cấu hình Profile riêng của các Plugins để xcodebuild tự động re-sign khi export
                   config.build_settings.delete("PROVISIONING_PROFILE_SPECIFIER")
                   config.build_settings.delete("CODE_SIGN_IDENTITY")
                   config.build_settings.delete("CODE_SIGN_STYLE")
-                  config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
-                  config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
                 end
               end
             end
 
             project.save
-            puts "==> Cau hinh ky cho App va tat ca Frameworks THANH CONG!"
+            puts "==> Cấu hình hoàn tất thành công!"
           else
-            puts "==> LOI: Khong tim thay Target App!"
+            puts "==> LỖI: Không tìm thấy Target App!"
             exit 1
           end
           '
           
-          # 3. Archive project
+          # 3. Build Archive (Loại bỏ flag CODE_SIGNING_ALLOWED=NO để không nuốt mất Entitlements)
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
+                     CODE_SIGN_ENTITLEMENTS="App/App.entitlements" \
                      ONLY_ACTIVE_ARCH=NO \
                      ARCHS="arm64" \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGNING_ALLOWED=NO \
                      archive
 
-          # 4. Export IPA
+          # 4. Export IPA (Xcode tự động nhúng Entitlements & re-sign toàn bộ App + Plugins)
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
