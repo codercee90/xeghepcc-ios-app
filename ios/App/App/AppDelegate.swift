@@ -1,4 +1,5 @@
 import UIKit
+import Network
 import Capacitor
 import FirebaseCore
 
@@ -23,7 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         
         // 2. Tắt tự động đăng ký Push ở tầng Native khi dùng chứng chỉ Sideload/3uTools
-        UIApplication.shared.unregisterForRemoteNotifications()
+        // UIApplication.shared.unregisterForRemoteNotifications()
 
         return true
     }
