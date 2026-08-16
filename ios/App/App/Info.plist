@@ -2,6 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- 1. CẤU HÌNH HỆ THỐNG & CAPACITOR -->
 	<key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
@@ -50,39 +51,49 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Ứng dụng cần vị trí để xác định điểm đón, trả khách và định vị vị trí của bạn trên bản đồ.</string>
+	<!-- 2. MIỄN XÁC NHẬN MÃ HÓA (BẮT BUỘC CHO TESTFLIGHT CI/CD) -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Ứng dụng tài xế cần truy cập vị trí liên tục kể cả khi tắt màn hình hoặc chuyển ứng dụng để cập nhật hành trình cho khách hàng.</string>
+	<!-- 3. CẤU HÌNH FIREBASE MESSAGING -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<true/>
 
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Ứng dụng cần vị trí liên tục để duy trì định vị tài xế trên bản đồ theo thời gian thực.</string>
-
-	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
-	<dict>
-		<key>PreciseLocation</key>
-		<string>Ứng dụng cần vị trí chính xác để dẫn đường và tính khoảng cách di chuyển thực tế.</string>
-	</dict>
-
+	<!-- 4. CHẾ ĐỘ CHẠY NỀN -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 		<string>remote-notification</string>
 	</array>
 
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Ứng dụng cần sử dụng Micro để ghi âm và gửi tin nhắn thoại giữa tài xế và hành khách.</string>
+	<!-- 5. QUYỀN TRUY CẬP VỊ TRÍ (GEOLOCATION) -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Ứng dụng cần vị trí để xác định điểm đón, trả khách và định vị vị trí của bạn trên bản đồ.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Ứng dụng cần truy cập vị trí liên tục kể cả khi tắt màn hình hoặc chuyển ứng dụng để cập nhật hành trình cho khách hàng.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Ứng dụng cần vị trí liên tục để duy trì định vị trên bản đồ theo thời gian thực.</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>PreciseLocation</key>
+		<string>Ứng dụng cần vị trí chính xác để dẫn đường và tính khoảng cách di chuyển thực tế.</string>
+	</dict>
 
+	<!-- 6. QUYỀN CAMERA & HÌNH ẢNH -->
+	<key>NSCameraUsageDescription</key>
+	<string>Ứng dụng cần mở Camera để chụp ảnh đại diện, bằng lái xe và căn cước công dân.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Ứng dụng cần truy cập thư viện ảnh để tải lên giấy tờ hoặc hình ảnh chuyến xe.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Ứng dụng cần quyền lưu hình ảnh chuyến xe hoặc hóa đơn vào thư viện ảnh của bạn.</string>
+
+	<!-- 7. QUYỀN ÂM THANH & GIỌNG NÓI -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ứng dụng cần sử dụng Micro để ghi âm và gửi tin nhắn thoại.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Ứng dụng cần nhận diện giọng nói để hỗ trợ nhập thông tin chuyến đi bằng giọng nói.</string>
 
-	<key>NSCameraUsageDescription</key>
-	<string>Ứng dụng cần mở Camera để chụp ảnh đại diện, bằng lái xe và căn cước công danh.</string>
-
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Ứng dụng cần truy cập thư viện ảnh để tải lên giấy tờ tài xế hoặc hình ảnh chuyến xe.</string>
-
+	<!-- 8. CẤU HÌNH MẠNG (HTTP/HTTPS) -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>
