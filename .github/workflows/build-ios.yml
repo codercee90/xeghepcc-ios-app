@@ -28,8 +28,7 @@ jobs:
       - name: Install NPM Dependencies & Plugins
         run: |
           npm install
-          #npm install @capacitor-community/background-geolocation @capacitor-firebase/messaging --save || true
-          npm install @capgo/capacitor-background-geolocation@latest @capacitor-firebase/messaging --save || true
+          npm install @capacitor-community/background-geolocation @capacitor-firebase/messaging --save || true
 
       - name: Create GoogleService-Info.plist
         run: |
