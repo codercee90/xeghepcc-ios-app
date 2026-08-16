@@ -15,7 +15,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     private var isFirstLoad = true
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Ép màu nền của Native Window trùng với màu Splash (#F2F2F7)
         self.window?.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1.0)
 
         // 1. Khởi tạo Firebase
@@ -26,7 +25,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             FirebaseApp.configure()
         }
 
-        // 2. Cấu hình Notification & Firebase Messaging Delegates
+        // 2. Setup Notification Center Delegate
         UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
 
@@ -57,7 +56,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         NotificationCenter.default.post(name: Notification.Name("FCMToken"), object: nil, userInfo: tokenDict)
     }
 
-    // MARK: - UNUserNotificationCenterDelegate (Foreground Push)
+    // MARK: - UNUserNotificationCenterDelegate
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let userInfo = notification.request.content.userInfo
         NotificationCenter.default.post(name: .capacitorDidReceiveRemoteNotification, object: userInfo)
