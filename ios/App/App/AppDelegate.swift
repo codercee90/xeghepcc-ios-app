@@ -13,7 +13,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     private var isFirstLoad = true
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // 1. Chỉ gọi FirebaseConfigure nếu có file GoogleService-Info.plist
+        // Ép màu nền của Native Window trùng với màu Splash
+		self.window?.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1.0) // Mã màu #F2F2F7
+		
+		// 1. Chỉ gọi FirebaseConfigure nếu có file GoogleService-Info.plist
         if let filePath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            let options = FirebaseOptions(contentsOfFile: filePath) {
             FirebaseApp.configure(options: options)
