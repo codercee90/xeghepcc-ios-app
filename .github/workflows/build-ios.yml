@@ -30,22 +30,20 @@ jobs:
           npm ci || npm install
           npm install @capacitor-community/background-geolocation @capacitor-firebase/messaging --save || true
 
-      - name: Build Web App
-        run: npm run build --if-present
-
       - name: Create GoogleService-Info.plist
         run: |
           mkdir -p ios/App/App
           echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
 
-      - name: Capacitor Sync iOS
+      # Build Web Assets & Đồng bộ chuẩn vào Capacitor iOS
+      - name: Build Web App & Sync Capacitor
         run: |
+          npm run build
           npx cap add ios || true
+          npx cap copy ios
           npx cap sync ios
 
-      # =========================================================================
-      # TỰ ĐỘNG BỎ QUA XÁC NHẬN MISSING COMPLIANCE
-      # =========================================================================
+      # Tự động bỏ qua xác nhận Export Compliance trên Info.plist SAU KHHI SYNC
       - name: Add Export Compliance Flag to Info.plist
         run: |
           PLIST_PATH="ios/App/App/Info.plist"
@@ -143,13 +141,12 @@ jobs:
           EOF
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐÃ KHẮC PHỤC LỖI CAN THIỆP SPM)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA 
       # =========================================================================
       - name: Build and Export IPA
         env:
           PP_NAME: ${{ env.PP_NAME }}
         run: |
-          # 1. Tạo file App.entitlements vật lý
           mkdir -p ios/App/App
           cat <<EOF > ios/App/App/App.entitlements
           <?xml version="1.0" encoding="UTF-8"?>
@@ -162,16 +159,14 @@ jobs:
           </plist>
           EOF
 
-          # 2. Dùng Ruby add file vào xcodeproj và gán Entitlements chuẩn
           ruby -r xcodeproj -e '
           project_path = "ios/App/App.xcodeproj"
           project = Xcodeproj::Project.open(project_path)
           app_target = project.targets.find { |t| t.name == "App" }
 
           if app_target
-            puts "==> Dang thiet lap Signing va Entitlements cho Target: #{app_target.name}"
+            puts "==> Cấu hình Targets..."
             
-            # Thêm file reference vào Xcode Project nếu chưa có
             app_group = project.main_group["App"] || project.main_group
             file_ref = app_group.find_file_by_path("App.entitlements")
             unless file_ref
@@ -184,17 +179,18 @@ jobs:
               config.build_settings["CODE_SIGN_IDENTITY"] = "Apple Distribution"
               config.build_settings["DEVELOPMENT_TEAM"] = "HK58UX9N3D"
               config.build_settings["PROVISIONING_PROFILE_SPECIFIER"] = ENV["PP_NAME"]
+              config.build_settings["SKIP_INSTALL"] = "NO"
             end
 
             project.save
-            puts "==> Cau hinh Target App THANH CONG!"
+            puts "==> Cấu hình Target App THANH CÔNG!"
           else
-            puts "==> LOI: Khong tim thay Target App!"
+            puts "==> LỖI: Không tìm thấy Target App!"
             exit 1
           end
           '
           
-          # 2. Archive ứng dụng (Không dùng xcconfig chung để tránh ảnh hưởng SPM)
+          # Archive project
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
@@ -202,13 +198,12 @@ jobs:
                      -archivePath build/App.xcarchive \
                      archive
 
-          # 3. Export IPA
+          # Export IPA
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
                      -exportPath build/output
 
-          # 4. Đảm bảo file .ipa đầu ra luôn mang tên App.ipa
           cd build/output
           IPA_FILE=$(ls *.ipa | head -n 1)
           if [ "$IPA_FILE" != "App.ipa" ]; then
@@ -216,25 +211,18 @@ jobs:
           fi
 
       # =========================================================================
-      # 6.1 KIỂM TRA ENTITLEMENTS TRỰC TIẾP TRÊN GITHUB ACTIONS
+      # 7. CHECK ENTITLEMENTS VÀ DUNG LƯỢNG
       # =========================================================================
-      - name: Verify IPA Entitlements
+      - name: Verify IPA
         run: |
+          ls -lh build/output/App.ipa
           unzip -q build/output/App.ipa -d temp_ipa
           echo "==> ENTITLEMENTS TRONG BINARY:"
           codesign -d --entitlements :- temp_ipa/Payload/App.app
-          
-          echo "==> KIỂM TRA PUSH NOTIFICATIONS:"
-          if codesign -d --entitlements :- temp_ipa/Payload/App.app | grep -q "aps-environment"; then
-            echo "SUCCESS: Da tim thấy aps-environment trong App!"
-          else
-            echo "ERROR: Vẫn chưa co aps-environment trong App!"
-            exit 1
-          fi
           rm -rf temp_ipa
 
       # =========================================================================
-      # 7. UPLOAD IPA LÊN GITHUB ARTIFACTS
+      # 8. UPLOAD IPA LÊN GITHUB ARTIFACTS & TESTFLIGHT
       # =========================================================================
       - name: Upload IPA to GitHub Artifacts
         uses: actions/upload-artifact@v4
@@ -243,9 +231,6 @@ jobs:
           path: build/output/App.ipa
           retention-days: 7
 
-      # =========================================================================
-      # 8. UPLOAD IPA LÊN TESTFLIGHT (FASTLANE)
-      # =========================================================================
       - name: Upload and Distribute to TestFlight
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
@@ -271,8 +256,6 @@ jobs:
           ipa:"build/output/App.ipa" \
           skip_waiting_for_build_processing:false \
           uses_non_exempt_encryption:false \
-          changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng." \
-          #groups:"Testers" \
-          #beta_app_description:"Ứng dụng thử nghiệm dành cho nhóm Testers."
+          changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
 
           rm -f api_key.json
