@@ -48,6 +48,9 @@ jobs:
         run: |
           PLIST_PATH="ios/App/App/Info.plist"
           if [ -f "$PLIST_PATH" ]; then
+            /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string App" "$PLIST_PATH" || \
+            /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable App" "$PLIST_PATH"
+            
             /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 13.0" "$PLIST_PATH" || \
             /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 13.0" "$PLIST_PATH"
 
@@ -122,6 +125,8 @@ jobs:
           <dict>
               <key>method</key>
               <string>app-store</string>
+              <key>destination</key>
+              <string>upload</string>
               <key>teamID</key>
               <string>HK58UX9N3D</string>
               <key>signingStyle</key>
@@ -196,6 +201,7 @@ jobs:
                 else
                   # Bỏ cấu hình Profile riêng của các Plugins để xcodebuild tự động re-sign khi export
                   config.build_settings["ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES"] = "NO"
+                  config.build_settings["SKIP_INSTALL"] = "YES"
                   config.build_settings.delete("PROVISIONING_PROFILE_SPECIFIER")
                   config.build_settings.delete("CODE_SIGN_IDENTITY")
                   config.build_settings.delete("CODE_SIGN_STYLE")
