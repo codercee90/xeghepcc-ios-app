@@ -258,42 +258,33 @@ jobs:
           rm -rf temp_ipa
 
       # =========================================================================
-      # 8. UPLOAD IPA LÊN GITHUB ARTIFACTS & TESTFLIGHT
+      # DEBUG: VALIDATE IPA TRỰC TIẾP VỚI SERVER APPLE
       # =========================================================================
-      - name: Upload IPA to GitHub Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-build-signed-app
-          path: build/output/App.ipa
-          retention-days: 7
-
-      - name: Upload and Distribute to TestFlight
+      - name: Validate IPA with Apple Server (Debug)
         env:
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          node -e '
-          const fs = require("fs");
+          # 1. Tạo file private key .p8 tạm thời cho altool
+          mkdir -p ~/.appstoreconnect/private_keys
+          
+          # Xử lý xuống dòng cho Private Key
+          NODE_KEY_PARSER='
           let rawKey = process.env.PRIVATE_KEY || "";
-          if (!rawKey.includes("\n")) {
-            rawKey = rawKey.replace(/\\n/g, "\n");
-          }
-          const config = {
-            key_id: process.env.KEY_ID,
-            issuer_id: process.env.ISSUER_ID,
-            key: rawKey
-          };
-          fs.writeFileSync("api_key.json", JSON.stringify(config, null, 2));
+          if (!rawKey.includes("\n")) rawKey = rawKey.replace(/\\n/g, "\n");
+          console.log(rawKey);
           '
+          node -e "$NODE_KEY_PARSER" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
 
-          fastlane run upload_to_testflight \
-          api_key_path:"api_key.json" \
-          ipa:"build/output/App.ipa" \
-          skip_waiting_for_build_processing:false \
-          distribute_external:false \
-          notify_external_testers:false \
-          changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
-          #uses_non_exempt_encryption:false
+          echo "==> Đang kiểm tra IPA trực tiếp với Apple..."
+          
+          # 2. Chạy lệnh validate IPA
+          xcrun altool --validate-app \
+            -f "build/output/App.ipa" \
+            -t ios \
+            --apiKey "$KEY_ID" \
+            --apiIssuer "$ISSUER_ID" || true
 
-          rm -f api_key.json
+          # 3. Dọn dẹp key bảo mật
+          rm -rf ~/.appstoreconnect/private_keys
