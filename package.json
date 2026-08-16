@@ -12,6 +12,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@capacitor-community/background-geolocation": "^1.2.1",
+    "@capacitor-firebase/messaging": "^8.0.0",
     "@capacitor/core": "^8.4.2",
     "@capacitor/geolocation": "^8.2.0",
     "@capacitor/ios": "^8.4.2",
