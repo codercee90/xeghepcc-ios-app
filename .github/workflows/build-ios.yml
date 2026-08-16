@@ -39,11 +39,9 @@ jobs:
       - name: Build Web App & Sync Capacitor
         run: |
           npm run build
-          #npx cap add ios || true
-          #npx cap copy ios
           npx cap sync ios
 
-      # Tự động bỏ qua xác nhận Export Compliance trên Info.plist SAU KHHI SYNC
+      # Tự động bỏ qua xác nhận Export Compliance trên Info.plist SAU KHI SYNC
       - name: Add Export Compliance Flag to Info.plist
         run: |
           PLIST_PATH="ios/App/App/Info.plist"
@@ -136,13 +134,9 @@ jobs:
               <key>uploadSymbols</key>
               <false/>
               <key>stripSwiftSymbols</key>
-              <false/>
-              <key>compileBitcode</key>
-              <false/>
+              <true/>
               <key>manageAppVersionAndBuildNumber</key>
               <false/>
-              <key>thinning</key>
-              <string>&lt;none&gt;</string>
               <key>provisioningProfiles</key>
               <dict>
                   <key>${BUNDLE_ID}</key>
@@ -153,13 +147,13 @@ jobs:
           EOF
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (TỐI ƯU SIGNING VA ENTITLEMENTS)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA chuẩn Capacitor
       # =========================================================================
       - name: Build and Export IPA
         env:
           PP_NAME: ${{ env.PP_NAME }}
         run: |
-          # 1. Tạo file App.entitlements vật lý
+          # 1. Tạo file App.entitlements
           mkdir -p ios/App/App
           cat <<EOF > ios/App/App/App.entitlements
           <?xml version="1.0" encoding="UTF-8"?>
@@ -172,16 +166,15 @@ jobs:
           </plist>
           EOF
 
-          # 2. Dùng Ruby cấu hình Manual Signing cho App Target và xóa Signing rác ở Plugin Target
+          # 2. Cấu hình Signing chuẩn qua Ruby (không triệt tiêu Signing của Sub-targets)
           ruby -r xcodeproj -e '
           project_path = "ios/App/App.xcodeproj"
           project = Xcodeproj::Project.open(project_path)
           app_target = project.targets.find { |t| t.name == "App" }
 
           if app_target
-            puts "==> Cấu hình Signing và Entitlements..."
+            puts "==> Cấu hình Signing chuẩn cho App Target..."
 
-            # Thêm file reference vào Xcode Project nếu chưa xuất hiện
             app_group = project.main_group["App"] || project.main_group
             file_ref = app_group.find_file_by_path("App.entitlements")
             unless file_ref
@@ -201,45 +194,32 @@ jobs:
                   config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "App/App.entitlements"
                   config.build_settings["SKIP_INSTALL"] = "NO"
                 else
-                  # Bỏ cấu hình Profile riêng của các Plugins để xcodebuild tự động re-sign khi export
-                  config.build_settings["ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES"] = "NO"
                   config.build_settings["SKIP_INSTALL"] = "YES"
-                  config.build_settings.delete("PROVISIONING_PROFILE_SPECIFIER")
-                  config.build_settings.delete("CODE_SIGN_IDENTITY")
-                  config.build_settings.delete("CODE_SIGN_STYLE")
-                  config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
-                  config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
                 end
               end
             end
 
             project.save
             puts "==> Cấu hình hoàn tất thành công!"
-          else
-            puts "==> LỖI: Không tìm thấy Target App!"
-            exit 1
           end
           '
           
-          # 3. Build Archive (Loại bỏ flag CODE_SIGNING_ALLOWED=NO để không nuốt mất Entitlements)
-          xcodebuild -project ios/App/App.xcodeproj \
+          # 3. Clean & Build Archive chuẩn native (không pass gượng ép tham số ARCHS)
+          xcodebuild clean archive \
+                     -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
-                     CODE_SIGN_ENTITLEMENTS="App/App.entitlements" \
-                     CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
-                     ONLY_ACTIVE_ARCH=NO \
-                     ARCHS="arm64" \
-                     archive
+                     CODE_SIGN_ENTITLEMENTS="App/App.entitlements"
 
-          # 4. Export IPA (Xcode tự động nhúng Entitlements & re-sign toàn bộ App + Plugins)
+          # 4. Export IPA
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
                      -exportPath build/output
 
-          # 5. Đảm bảo file .ipa đầu ra luôn mang tên App.ipa
+          # 5. Đổi tên IPA đầu ra
           cd build/output
           IPA_FILE=$(ls *.ipa | head -n 1)
           if [ "$IPA_FILE" != "App.ipa" ]; then
@@ -247,90 +227,22 @@ jobs:
           fi
 
       # =========================================================================
-      # 7. VERIFY CODESIGN, CERTIFICATES & ENTITLEMENTS (MAIN APP + FRAMEWORKS)
+      # 7. VERIFY CODESIGN & FRAMEWORKS
       # =========================================================================
       - name: Verify IPA Signature & Frameworks
         run: |
           echo "================================================="
-          echo "1. DUNG LƯỢNG FILE IPA"
+          echo "1. DUNG LƯỢNG FILE IPA SAU KHI FIX"
           echo "================================================="
           ls -lh build/output/App.ipa
 
-          # Giải nén IPA vào thư mục tạm
           unzip -q build/output/App.ipa -d temp_ipa
           APP_PATH="temp_ipa/Payload/App.app"
 
-          echo ""
-          echo "================================================="
-          echo "2. CHỮ KÝ & ENTITLEMENTS CỦA MAIN APP"
-          echo "================================================="
-          echo "--> Authority / Certificate:"
           codesign -dvvv "$APP_PATH" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier"
-          
-          echo ""
-          echo "--> Entitlements gốc:"
-          codesign -d --entitlements :- "$APP_PATH"
+          codesign --verify --verbose=4 --deep "$APP_PATH" && echo "==> TẤT CẢ CHỮ KÝ ĐẠT CHUẨN 100%!"
 
-          echo ""
-          echo "================================================="
-          echo "3. KIỂM TRA CHỮ KÝ TOÀN BỘ FRAMEWORKS & PLUGINS"
-          echo "================================================="
-          FRAMEWORKS_DIR="$APP_PATH/Frameworks"
-          
-          if [ -d "$FRAMEWORKS_DIR" ]; then
-            for fw in "$FRAMEWORKS_DIR"/*; do
-              if [ -d "$fw" ] || [ -f "$fw" ]; then
-                FW_NAME=$(basename "$fw")
-                echo "-------------------------------------------------"
-                echo "Framework: $FW_NAME"
-                codesign -dvvv "$fw" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier" || echo "LỖI: $FW_NAME KHÔNG CÓ CHỮ KÝ!"
-              fi
-            done
-          else
-            echo "--> Không tìm thấy thư mục Frameworks."
-          fi
-
-          echo ""
-          echo "================================================="
-          echo "4. KIỂM TRA TÍNH TOÀN VẸN CHỮ KÝ (DEEP VERIFY)"
-          echo "================================================="
-          # Lệnh này sẽ quét toàn bộ cây thư mục bên trong App để phát hiện file/framework bị lỗi chữ ký
-          codesign --verify --verbose=4 --deep "$APP_PATH" && echo "==> TẤT CẢ CHỮ KÝ (MAIN APP + FRAMEWORKS) ĐẠT CHUẨN 100%!" || echo "==> LỖI: PHÁT HIỆN LỆCH CHỮ KÝ TRONG BUNDLE!"
-
-          # Dọn dẹp folder tạm
           rm -rf temp_ipa
-
-      # =========================================================================
-      # DEBUG: VALIDATE IPA TRỰC TIẾP VỚI SERVER APPLE
-      # =========================================================================
-      - name: Validate IPA with Apple Server (Debug)
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-        run: |
-          # 1. Tạo file private key .p8 tạm thời cho altool
-          mkdir -p ~/.appstoreconnect/private_keys
-          
-          # Xử lý xuống dòng cho Private Key
-          NODE_KEY_PARSER='
-          let rawKey = process.env.PRIVATE_KEY || "";
-          if (!rawKey.includes("\n")) rawKey = rawKey.replace(/\\n/g, "\n");
-          console.log(rawKey);
-          '
-          node -e "$NODE_KEY_PARSER" > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
-
-          echo "==> Đang kiểm tra IPA trực tiếp với Apple..."
-          
-          # 2. Chạy lệnh validate IPA
-          xcrun altool --validate-app \
-            -f "build/output/App.ipa" \
-            -t ios \
-            --apiKey "$KEY_ID" \
-            --apiIssuer "$ISSUER_ID" || true
-
-          # 3. Dọn dẹp key bảo mật
-          rm -rf ~/.appstoreconnect/private_keys
 
       # =========================================================================
       # 8. UPLOAD IPA LÊN GITHUB ARTIFACTS & TESTFLIGHT
