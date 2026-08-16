@@ -5,6 +5,13 @@ import FirebaseCore
 import FirebaseMessaging
 import UserNotifications
 
+// Khai báo mở rộng Notification Name chuẩn xác cho Capacitor
+extension Notification.Name {
+    static let capacitorDidRegisterForRemoteNotifications = Notification.Name("capacitorDidRegisterForRemoteNotifications")
+    static let capacitorDidFailToRegisterForRemoteNotifications = Notification.Name("capacitorDidFailToRegisterForRemoteNotifications")
+    static let capacitorDidReceiveRemoteNotification = Notification.Name("capacitorDidReceiveRemoteNotification")
+}
+
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
 
@@ -25,7 +32,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
             FirebaseApp.configure()
         }
 
-        // 2. Setup Notification Center Delegate
+        // 2. Setup Delegates
         UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
 
