@@ -142,7 +142,7 @@ jobs:
               <key>manageAppVersionAndBuildNumber</key>
               <false/>
               <key>thinning</key>
-              <string>&lt;none&gt;</string>
+              <string><none></string>
               <key>provisioningProfiles</key>
               <dict>
                   <key>${BUNDLE_ID}</key>
