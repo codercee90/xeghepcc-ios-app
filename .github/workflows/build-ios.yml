@@ -205,6 +205,8 @@ jobs:
                   config.build_settings.delete("PROVISIONING_PROFILE_SPECIFIER")
                   config.build_settings.delete("CODE_SIGN_IDENTITY")
                   config.build_settings.delete("CODE_SIGN_STYLE")
+                  config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
+                  config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
                 end
               end
             end
