@@ -126,7 +126,7 @@ jobs:
               <key>method</key>
               <string>app-store</string>
               <key>destination</key>
-              <string>upload</string>
+              <string>export</string>
               <key>teamID</key>
               <string>HK58UX9N3D</string>
               <key>signingStyle</key>
