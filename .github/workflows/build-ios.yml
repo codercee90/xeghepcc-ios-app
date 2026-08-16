@@ -141,8 +141,6 @@ jobs:
               <false/>
               <key>manageAppVersionAndBuildNumber</key>
               <false/>
-              <key>thinning</key>
-              <string>&lt;none&gt;</string>
               <key>provisioningProfiles</key>
               <dict>
                   <key>${BUNDLE_ID}</key>
@@ -151,6 +149,9 @@ jobs:
           </dict>
           </plist>
           EOF
+
+#              <key>thinning</key>
+#              <string>&lt;none&gt;</string>
 
       # =========================================================================
       # 6. BUILD ARCHIVE VÀ EXPORT IPA (TỐI ƯU SIGNING VA ENTITLEMENTS)
@@ -182,11 +183,11 @@ jobs:
             puts "==> Cấu hình Signing và Entitlements..."
 
             # Thêm file reference vào Xcode Project nếu chưa xuất hiện
-            app_group = project.main_group["App"] || project.main_group
-            file_ref = app_group.find_file_by_path("App.entitlements")
-            unless file_ref
-              app_group.new_file("App/App.entitlements")
-            end
+            #app_group = project.main_group["App"] || project.main_group
+            #file_ref = app_group.find_file_by_path("App.entitlements")
+            #unless file_ref
+            #  app_group.new_file("App/App.entitlements")
+            #end
 
             project.targets.each do |target|
               target.build_configurations.each do |config|
@@ -290,7 +291,9 @@ jobs:
           api_key_path:"api_key.json" \
           ipa:"build/output/App.ipa" \
           skip_waiting_for_build_processing:false \
-          uses_non_exempt_encryption:false \
+          distribute_external:false \
+          notify_external_testers:false \
           changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
+          #uses_non_exempt_encryption:false
 
           rm -f api_key.json
