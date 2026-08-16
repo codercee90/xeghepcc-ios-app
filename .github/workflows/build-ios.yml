@@ -141,31 +141,51 @@ jobs:
           EOF
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐÃ FIX LỖI PROVISIONING CHO FRAMEWORKS)
       # =========================================================================
       - name: Build and Export IPA
         env:
           PP_NAME: ${{ env.PP_NAME }}
         run: |
-          # 1. Build Archive bằng file .xcodeproj
+          # 1. Chỉ gán Provisioning Profile cho duy nhất App Target chính (Bỏ qua các SPM/Pods Target)
+          ruby -r xcodeproj -e '
+          project_path = "ios/App/App.xcodeproj"
+          project = Xcodeproj::Project.open(project_path)
+
+          project.targets.each do |target|
+            target.build_configurations.each do |config|
+              if target.name == "App"
+                config.build_settings["CODE_SIGN_STYLE"] = "Manual"
+                config.build_settings["CODE_SIGN_IDENTITY"] = "Apple Distribution"
+                config.build_settings["DEVELOPMENT_TEAM"] = "HK58UX9N3D"
+                config.build_settings["PROVISIONING_PROFILE_SPECIFIER"] = ENV["PP_NAME"]
+              else
+                # Xóa ép profile khỏi các dependencies phụ thuộc
+                config.build_settings.delete("PROVISIONING_PROFILE_SPECIFIER")
+                config.build_settings.delete("PROVISIONING_PROFILE")
+              end
+            end
+          end
+
+          project.save
+          puts "==> Đã cấu hình Signing độc lập thành công cho Target App!"
+          '
+
+          # 2. Build Archive (KHÔNG truyền PROVISIONING_PROFILE_SPECIFIER ở dòng lệnh xcodebuild)
           xcodebuild clean archive \
                      -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
-                     -archivePath build/App.xcarchive \
-                     CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     DEVELOPMENT_TEAM="HK58UX9N3D" \
-                     PROVISIONING_PROFILE_SPECIFIER="$PP_NAME"
+                     -archivePath build/App.xcarchive
 
-          # 2. Export IPA
+          # 3. Export IPA (ExportOptions.plist sẽ đảm nhận việc ký chuẩn IPA cuối)
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist ExportOptions.plist \
                      -exportPath build/output
 
-          # 3. Đổi tên IPA đầu ra
+          # 4. Đổi tên IPA đầu ra
           cd build/output
           IPA_FILE=$(ls *.ipa | head -n 1)
           if [ "$IPA_FILE" != "App.ipa" ]; then
