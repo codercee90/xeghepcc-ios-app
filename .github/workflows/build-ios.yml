@@ -142,7 +142,7 @@ jobs:
               <key>manageAppVersionAndBuildNumber</key>
               <false/>
               <key>thinning</key>
-              <string>\<none\></string>
+              <string>&lt;none&gt;</string>
               <key>provisioningProfiles</key>
               <dict>
                   <key>${BUNDLE_ID}</key>
@@ -265,32 +265,3 @@ jobs:
           name: ios-build-signed-app
           path: build/output/App.ipa
           retention-days: 7
-
-      - name: Upload and Distribute to TestFlight
-        env:
-          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-        run: |
-          node -e '
-          const fs = require("fs");
-          let rawKey = process.env.PRIVATE_KEY || "";
-          if (!rawKey.includes("\n")) {
-            rawKey = rawKey.replace(/\\n/g, "\n");
-          }
-          const config = {
-            key_id: process.env.KEY_ID,
-            issuer_id: process.env.ISSUER_ID,
-            key: rawKey
-          };
-          fs.writeFileSync("api_key.json", JSON.stringify(config, null, 2));
-          '
-
-          fastlane run upload_to_testflight \
-          api_key_path:"api_key.json" \
-          ipa:"build/output/App.ipa" \
-          skip_waiting_for_build_processing:false \
-          uses_non_exempt_encryption:false \
-          changelog:"Bản cập nhật tính năng mới và sửa các lỗi tồn đọng."
-
-          rm -f api_key.json
