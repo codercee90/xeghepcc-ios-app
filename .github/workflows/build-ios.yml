@@ -141,15 +141,15 @@ jobs:
           EOF
 
       # =========================================================================
-      # 6. BUILD ARCHIVE VÀ EXPORT IPA (ĐÃ FIX: Dùng xcodebuild Native)
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA
       # =========================================================================
       - name: Build and Export IPA
         env:
           PP_NAME: ${{ env.PP_NAME }}
         run: |
-          # 1. Clean & Build Archive chuẩn Native Capacitor
+          # 1. Build Archive bằng file .xcodeproj
           xcodebuild clean archive \
-                     -workspace ios/App/App.xcworkspace \
+                     -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
