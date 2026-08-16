@@ -2,66 +2,104 @@ import UIKit
 import Network
 import Capacitor
 import FirebaseCore
+import FirebaseMessaging
+import UserNotifications
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
 
     var window: UIWindow?
-	
-	// 2. Thêm các biến theo dõi mạng
+    
+    // Các biến theo dõi mạng
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "NetworkMonitor")
     private var isFirstLoad = true
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Ép màu nền của Native Window trùng với màu Splash
-		self.window?.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1.0) // Mã màu #F2F2F7
-		
-		// 1. Chỉ gọi FirebaseConfigure nếu có file GoogleService-Info.plist
+        // Ép màu nền của Native Window trùng với màu Splash (#F2F2F7)
+        self.window?.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1.0)
+        
+        // 1. Khởi tạo Firebase
         if let filePath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            let options = FirebaseOptions(contentsOfFile: filePath) {
             FirebaseApp.configure(options: options)
+        } else {
+            FirebaseApp.configure()
         }
-        
-        // 2. Tắt tự động đăng ký Push ở tầng Native khi dùng chứng chỉ Sideload/3uTools
-        // UIApplication.shared.unregisterForRemoteNotifications()
+
+        // 2. Thiết lập Notification Delegate & Messaging Delegate
+        UNUserNotificationCenter.current().delegate = self
+        Messaging.messaging().delegate = self
+
+        // 3. Đăng ký nhận Remote Notification với Apple APNs
+        application.registerForRemoteNotifications()
 
         return true
     }
 
-    func applicationWillResignActive(_ application: UIApplication) {
-        // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
-        // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
+    // MARK: - APNs & Firebase Token Handling (BẮT BUỘC CHO PUSH NOTIFICATION)
+
+    // Khi APNs đăng ký thành công và trả về Device Token
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        // Gán APNs Token cho Firebase Messaging
+        Messaging.messaging().apnsToken = deviceToken
+        
+        // Bắn sự kiện sang Capacitor Bridge để JS/TS nhận token
+        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
     }
 
-    func applicationDidEnterBackground(_ application: UIApplication) {
-        // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
-        // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+    // Khi APNs đăng ký thất bại
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
     }
 
-    func applicationWillEnterForeground(_ application: UIApplication) {
-        // Called as part of the transition from the background to the active state; here you can undo many of the changes made on entering the background.
+    // Khi nhận được Notification ở Background / Foreground
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        NotificationCenter.default.post(name: .capacitorDidReceiveRemoteNotification, object: userInfo)
+        completionHandler(.newData)
     }
 
-    func applicationDidBecomeActive(_ application: UIApplication) {
-        // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+    // MARK: - Firebase Messaging Delegate
+
+    // Nhận FCM Registration Token từ Firebase
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        let tokenDict = ["token": fcmToken ?? ""]
+        NotificationCenter.default.post(name: Notification.Name("FCMToken"), object: nil, userInfo: tokenDict)
     }
 
-    func applicationWillTerminate(_ application: UIApplication) {
-        // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+    // MARK: - UNUserNotificationCenter Delegate (Hiển thị Notification khi App đang mở)
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        let userInfo = notification.request.content.userInfo
+        NotificationCenter.default.post(name: .capacitorDidReceiveRemoteNotification, object: userInfo)
+        
+        // Cho phép hiển thị Banner, Sound, Badge ngay cả khi app đang mở ở Foreground
+        if #available(iOS 14.0, *) {
+            completionHandler([.banner, .sound, .badge])
+        } else {
+            completionHandler([.alert, .sound, .badge])
+        }
     }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        let userInfo = response.notification.request.content.userInfo
+        NotificationCenter.default.post(name: .capacitorDidReceiveRemoteNotification, object: userInfo)
+        completionHandler()
+    }
+
+    // MARK: - App Lifecycle & Deep Links
+
+    func applicationWillResignActive(_ application: UIApplication) {}
+    func applicationDidEnterBackground(_ application: UIApplication) {}
+    func applicationWillEnterForeground(_ application: UIApplication) {}
+    func applicationDidBecomeActive(_ application: UIApplication) {}
+    func applicationWillTerminate(_ application: UIApplication) {}
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        // Called when the app was launched with a url. Feel free to add additional processing here,
-        // but if you want the App API to support tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
-        // Called when the app was launched with an activity, including Universal Links.
-        // Feel free to add additional processing here, but if you want the App API to support
-        // tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
-
 }
