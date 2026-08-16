@@ -134,7 +134,7 @@ jobs:
               <key>signingCertificate</key>
               <string>Apple Distribution</string>
               <key>uploadSymbols</key>
-              <true/>
+              <false/>
               <key>stripSwiftSymbols</key>
               <false/>
               <key>compileBitcode</key>
