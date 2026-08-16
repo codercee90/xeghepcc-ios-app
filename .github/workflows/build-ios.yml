@@ -42,7 +42,7 @@ jobs:
           #npx cap add ios || true
           #npx cap copy ios
           npx cap sync ios
-		  sed -i '' -e 's/\.v15/\.v13/g' ios/App/CapApp-SPM/Package.swift || true
+          sed -i '' -e 's/\.v15/\.v13/g' ios/App/CapApp-SPM/Package.swift || true
 
       # Tự động bỏ qua xác nhận Export Compliance trên Info.plist SAU KHHI SYNC
       - name: Add Export Compliance Flag to Info.plist
@@ -295,3 +295,13 @@ jobs:
 
           # Dọn dẹp folder tạm
           rm -rf temp_ipa
+
+      # =========================================================================
+      # 8. UPLOAD IPA LÊN GITHUB ARTIFACTS & TESTFLIGHT
+      # =========================================================================
+      - name: Upload IPA to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-signed-app
+          path: build/output/App.ipa
+          retention-days: 7
