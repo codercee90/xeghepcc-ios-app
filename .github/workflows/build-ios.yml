@@ -298,11 +298,18 @@ jobs:
           rm -rf temp_ipa
 
       # =========================================================================
-      # 8. UPLOAD IPA LÊN GITHUB ARTIFACTS & TESTFLIGHT
+      # 8. UPLOAD IPA LÊN TESTFLIGHT VIA ALTOOL
       # =========================================================================
-      - name: Upload IPA to GitHub Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-build-signed-app
-          path: build/output/App.ipa
-          retention-days: 7
+      - name: Upload IPA to TestFlight
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+        run: |
+          IPA_PATH=$(find build/output -name "*.ipa" | head -n 1)
+          
+          echo "Uploading $IPA_PATH to TestFlight..."
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --username "$APPLE_ID" \
+            --password "$APP_PASSWORD"
