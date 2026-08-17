@@ -28,7 +28,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         let isSideload = (try? String(contentsOfFile: Bundle.main.path(forResource: "embedded", ofType: "mobileprovision") ?? ""))?.contains("HK58UX9N3D") == false
 
         // 2. Chỉ khởi tạo Firebase & APNs nếu KHÔNG PHẢI Sideload
-        if !isSideloaded {
+        if !isSideload {
             // 1. Khởi tạo Firebase
             if let filePath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
                let options = FirebaseOptions(contentsOfFile: filePath) {
