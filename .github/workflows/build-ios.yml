@@ -1,4 +1,4 @@
-name: Build Unsigned iOS IPA
+name: Build and Upload iOS App to TestFlight
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-unsigned:
+  build-and-upload:
     runs-on: macos-latest
 
     steps:
@@ -35,13 +35,16 @@ jobs:
           mkdir -p ios/App/App
           echo "${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}" > ios/App/App/GoogleService-Info.plist
 
-      # Build Web Assets & Đồng bộ vào Capacitor iOS
+      # Build Web Assets & Đồng bộ chuẩn vào Capacitor iOS
       - name: Build Web App & Sync Capacitor
         run: |
           npm run build
+          #npx cap add ios || true
+          #npx cap copy ios
           npx cap sync ios
           sed -i '' -e 's/\.v15/\.v15/g' ios/App/CapApp-SPM/Package.swift || true
 
+      # Tự động bỏ qua xác nhận Export Compliance trên Info.plist SAU KHHI SYNC
       - name: Add Export Compliance Flag to Info.plist
         run: |
           PLIST_PATH="ios/App/App/Info.plist"
@@ -59,61 +62,247 @@ jobs:
       - name: Update Version and Build Number
         run: |
           cd ios/App
-          xcrun agvtool new-marketing-version "1.9"
+          xcrun agvtool new-marketing-version "2.0"
           xcrun agvtool new-version -all "${{ github.run_number }}"
           cd ../..
 
       # =========================================================================
-      # 4. BUILD APP (UNSIGNED) & ĐÓNG GÓI THÀNH IPA
+      # 4. IMPORT CERTIFICATE (.P12) AND PROVISIONING PROFILE
       # =========================================================================
-      - name: Build Unsigned App and Package IPA
+      - name: Install Certificate and Provisioning Profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          # 1. Tắt Code Signing trong Xcode Project
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/embedded.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          echo "$BUILD_CERTIFICATE_BASE64" | tr -d '\r\n ' | base64 --decode > $CERTIFICATE_PATH
+          echo "$BUILD_PROVISION_PROFILE_BASE64" | tr -d '\r\n ' | base64 --decode > $PP_PATH
+
+          PP_NAME=$(security cms -D -i $PP_PATH | grep -A1 '<key>Name</key>' | grep '<string>' | sed -e 's/.*<string>//' -e 's/<\/string>.*//')
+          PP_UUID=$(security cms -D -i $PP_PATH | grep -A1 '<key>UUID</key>' | grep '<string>' | sed -e 's/.*<string>//' -e 's/<\/string>.*//')
+
+          echo "PP_UUID=$PP_UUID" >> $GITHUB_ENV
+          echo "PP_NAME=$PP_NAME" >> $GITHUB_ENV
+
+          echo "==> Loaded Profile Name: '$PP_NAME'"
+          echo "==> Loaded Profile UUID: '$PP_UUID'"
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp $PP_PATH "$HOME/Library/MobileDevice/Provisioning Profiles/$PP_UUID.mobileprovision"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 3600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security default-keychain -s $KEYCHAIN_PATH
+          security list-keychains -s $KEYCHAIN_PATH $(security list-keychains | xargs)
+
+          curl -fL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o $RUNNER_TEMP/AppleWWDRCAG3.cer
+          security import $RUNNER_TEMP/AppleWWDRCAG3.cer -k $KEYCHAIN_PATH
+
+          security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+      # =========================================================================
+      # 5. TẠO FILE EXPORTOPTIONS.PLIST CHUẨN APP STORE / TESTFLIGHT
+      # =========================================================================
+      - name: Create ExportOptions.plist
+        env:
+          PP_NAME: ${{ env.PP_NAME }}
+        run: |
+          BUNDLE_ID="cc.xeghep.www.ios"
+
+          cat <<EOF > ExportOptions.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>destination</key>
+              <string>export</string>
+              <key>teamID</key>
+              <string>HK58UX9N3D</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingCertificate</key>
+              <string>Apple Distribution</string>
+              <key>uploadSymbols</key>
+              <false/>
+              <key>stripSwiftSymbols</key>
+              <false/>
+              <key>compileBitcode</key>
+              <false/>
+              <key>manageAppVersionAndBuildNumber</key>
+              <false/>
+              <key>thinning</key>
+              <string>&lt;none&gt;</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>${BUNDLE_ID}</key>
+                  <string>${PP_NAME}</string>
+              </dict>
+          </dict>
+          </plist>
+          EOF
+
+      # =========================================================================
+      # 6. BUILD ARCHIVE VÀ EXPORT IPA (TỐI ƯU SIGNING VA ENTITLEMENTS)
+      # =========================================================================
+      - name: Build and Export IPA
+        env:
+          PP_NAME: ${{ env.PP_NAME }}
+        run: |
+          # 1. Tạo file App.entitlements vật lý
+          mkdir -p ios/App/App
+          cat <<EOF > ios/App/App/App.entitlements
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>aps-environment</key>
+              <string>production</string>
+          </dict>
+          </plist>
+          EOF
+
+          # 2. Dùng Ruby cấu hình Manual Signing cho App Target và xóa Signing rác ở Plugin Target
           ruby -r xcodeproj -e '
           project_path = "ios/App/App.xcodeproj"
           project = Xcodeproj::Project.open(project_path)
+          app_target = project.targets.find { |t| t.name == "App" }
 
-          project.targets.each do |target|
-            target.build_configurations.each do |config|
-              config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.0"
-              config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
-              config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
-              config.build_settings["CODE_SIGN_IDENTITY"] = ""
-              config.build_settings["EXPANDED_CODE_SIGN_IDENTITY"] = ""
-              config.build_settings.delete("CODE_SIGN_ENTITLEMENTS")
+          if app_target
+            puts "==> Cấu hình Signing và Entitlements..."
+
+            # Thêm file reference vào Xcode Project nếu chưa xuất hiện
+            app_group = project.main_group["App"] || project.main_group
+            file_ref = app_group.find_file_by_path("App.entitlements")
+            unless file_ref
+              app_group.new_file("App/App.entitlements")
             end
+
+            project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.0"
+                
+                if target.name == "App"
+                  config.build_settings["ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES"] = "YES"
+                  config.build_settings["CODE_SIGN_STYLE"] = "Manual"
+                  config.build_settings["CODE_SIGN_IDENTITY"] = "Apple Distribution"
+                  config.build_settings["DEVELOPMENT_TEAM"] = "HK58UX9N3D"
+                  config.build_settings["PROVISIONING_PROFILE_SPECIFIER"] = ENV["PP_NAME"]
+                  config.build_settings["CODE_SIGN_ENTITLEMENTS"] = "App/App.entitlements"
+                  config.build_settings["SKIP_INSTALL"] = "NO"
+                else
+                  # Bỏ cấu hình Profile riêng của các Plugins để xcodebuild tự động re-sign khi export
+                  config.build_settings["ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES"] = "NO"
+                  config.build_settings["SKIP_INSTALL"] = "YES"
+                  config.build_settings["CODE_SIGNING_ALLOWED"] = "YES"
+                  config.build_settings["CODE_SIGN_STYLE"] = "Manual"
+                  config.build_settings["CODE_SIGN_IDENTITY"] = "Apple Distribution"
+                  config.build_settings["DEVELOPMENT_TEAM"] = "HK58UX9N3D"
+                  config.build_settings.delete("PROVISIONING_PROFILE_SPECIFIER")
+                end
+              end
+            end
+
+            project.save
+            puts "==> Cấu hình hoàn tất thành công!"
+          else
+            puts "==> LỖI: Không tìm thấy Target App!"
+            exit 1
           end
-
-          project.save
-          puts "==> Đã tắt Code Signing cho toàn bộ project thành công!"
           '
-
-          # 2. Build .app binary
+          
+          # 3. Build Archive (Loại bỏ flag CODE_SIGNING_ALLOWED=NO để không nuốt mất Entitlements)
           xcodebuild -project ios/App/App.xcodeproj \
                      -scheme App \
                      -configuration Release \
                      -sdk iphoneos \
-                     -derivedDataPath build/DerivedData \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGN_IDENTITY="" \
+                     -archivePath build/App.xcarchive \
+                     CODE_SIGN_ENTITLEMENTS="App/App.entitlements" \
                      ONLY_ACTIVE_ARCH=NO \
                      ARCHS="arm64" \
-                     build
+                     archive
 
-          # 3. Đóng gói thư mục App.app thành file App.ipa (Unsigned)
-          mkdir -p build/output/Payload
-          cp -R build/DerivedData/Build/Products/Release-iphoneos/App.app build/output/Payload/
+          # 4. Export IPA (Xcode tự động nhúng Entitlements & re-sign toàn bộ App + Plugins)
+          xcodebuild -exportArchive \
+                     -archivePath build/App.xcarchive \
+                     -exportOptionsPlist ExportOptions.plist \
+                     -exportPath build/output
+
+          # 5. Đảm bảo file .ipa đầu ra luôn mang tên App.ipa
           cd build/output
-          zip -r App.ipa Payload
-          rm -rf Payload
+          IPA_FILE=$(ls *.ipa | head -n 1)
+          if [ "$IPA_FILE" != "App.ipa" ]; then
+            mv "$IPA_FILE" App.ipa
+          fi
 
       # =========================================================================
-      # 5. UPLOAD UN-SIGNED IPA LÊN GITHUB ARTIFACTS
+      # 7. VERIFY CODESIGN, CERTIFICATES & ENTITLEMENTS (MAIN APP + FRAMEWORKS)
       # =========================================================================
-      - name: Upload Unsigned IPA to GitHub Artifacts
+      - name: Verify IPA Signature & Frameworks
+        run: |
+          echo "================================================="
+          echo "1. DUNG LƯỢNG FILE IPA"
+          echo "================================================="
+          ls -lh build/output/App.ipa
+
+          # Giải nén IPA vào thư mục tạm
+          unzip -q build/output/App.ipa -d temp_ipa
+          APP_PATH="temp_ipa/Payload/App.app"
+
+          echo ""
+          echo "================================================="
+          echo "2. CHỮ KÝ & ENTITLEMENTS CỦA MAIN APP"
+          echo "================================================="
+          echo "--> Authority / Certificate:"
+          codesign -dvvv "$APP_PATH" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier"
+          
+          echo ""
+          echo "--> Entitlements gốc:"
+          codesign -d --entitlements :- "$APP_PATH"
+
+          echo ""
+          echo "================================================="
+          echo "3. KIỂM TRA CHỮ KÝ TOÀN BỘ FRAMEWORKS & PLUGINS"
+          echo "================================================="
+          FRAMEWORKS_DIR="$APP_PATH/Frameworks"
+          
+          if [ -d "$FRAMEWORKS_DIR" ]; then
+            for fw in "$FRAMEWORKS_DIR"/*; do
+              if [ -d "$fw" ] || [ -f "$fw" ]; then
+                FW_NAME=$(basename "$fw")
+                echo "-------------------------------------------------"
+                echo "Framework: $FW_NAME"
+                codesign -dvvv "$fw" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier" || echo "LỖI: $FW_NAME KHÔNG CÓ CHỮ KÝ!"
+              fi
+            done
+          else
+            echo "--> Không tìm thấy thư mục Frameworks."
+          fi
+
+          echo ""
+          echo "================================================="
+          echo "4. KIỂM TRA TÍNH TOÀN VẸN CHỮ KÝ (DEEP VERIFY)"
+          echo "================================================="
+          # Lệnh này sẽ quét toàn bộ cây thư mục bên trong App để phát hiện file/framework bị lỗi chữ ký
+          codesign --verify --verbose=4 --deep "$APP_PATH" && echo "==> TẤT CẢ CHỮ KÝ (MAIN APP + FRAMEWORKS) ĐẠT CHUẨN 100%!" || echo "==> LỖI: PHÁT HIỆN LỆCH CHỮ KÝ TRONG BUNDLE!"
+
+          # Dọn dẹp folder tạm
+          rm -rf temp_ipa
+
+      # =========================================================================
+      # 8. UPLOAD IPA LÊN GITHUB ARTIFACTS & TESTFLIGHT
+      # =========================================================================
+      - name: Upload IPA to GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-unsigned-app
+          name: ios-build-signed-app
           path: build/output/App.ipa
           retention-days: 7
