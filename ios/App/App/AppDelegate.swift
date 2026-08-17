@@ -24,34 +24,48 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         self.window?.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1.0)
 
-        // 1. Kiểm tra an toàn: Nếu không có file provisioning hoặc ký cá nhân thì bỏ qua Push
+        // 1. Kiểm tra an toàn Provisioning Profile (Bọc do-catch chống crash)
         var canUsePush = false
-        if let path = Bundle.main.path(forResource: "embedded", ofType: "mobileprovision"),
-           let content = try? String(contentsOfFile: path, encoding: .isoLatin1) {
-            // Chỉ mở Push nếu đúng là Profile App Store / TestFlight chính thức
-            if content.contains("HK58UX9N3D") && !content.contains("iOS Team Provisioning Profile") {
-                canUsePush = true
+        if let path = Bundle.main.path(forResource: "embedded", ofType: "mobileprovision") {
+            do {
+                let content = try String(contentsOfFile: path, encoding: .isoLatin1)
+                // Kiểm tra xem có phải profile chính chủ và không phải free/dev profile không
+                if content.contains("HK58UX9N3D") && !content.contains("iOS Team Provisioning Profile") {
+                    canUsePush = true
+                }
+            } catch {
+                print("==> Không đọc được file embedded.mobileprovision: \(error)")
             }
         }
 
-        // 2. Khởi tạo Firebase cơ bản
-        if let filePath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
-           let options = FirebaseOptions(contentsOfFile: filePath) {
-            FirebaseApp.configure(options: options)
-        } else {
-            FirebaseApp.configure()
-        }
+        // 2. Khởi tạo Firebase AN TOÀN (Bọc chống Crash do thiếu GoogleService-Info.plist)
+        setupFirebaseSafely()
 
-        // 3. CHỈ ĐĂNG KÝ PUSH KHI ĐỦ QUYỀN (Tránh văng App 100% khi Sideload)
-        if canUsePush {
+        // 3. CHỈ ĐĂNG KÝ PUSH KHI ĐỦ QUYỀN & FIREBASE ĐÃ SẴN SÀNG
+        if canUsePush && FirebaseApp.app() != nil {
             UNUserNotificationCenter.current().delegate = self
             Messaging.messaging().delegate = self
             application.registerForRemoteNotifications()
+            print("==> Đã kích hoạt Push Notification.")
         } else {
-            print("==> Chế độ Sideload/Ký cá nhân: Đã tắt Push Notification Delegate để tránh văng App.")
+            print("==> Chế độ Sideload/3uTools/Ký cá nhân: Đã tắt Push Notification Delegate để tránh văng App.")
         }
 
         return true
+    }
+
+    // MARK: - Hàm khởi tạo Firebase an toàn
+    private func setupFirebaseSafely() {
+        // Nếu Firebase đã được khởi tạo trước đó thì bỏ qua
+        guard FirebaseApp.app() == nil else { return }
+
+        if let filePath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           let options = FirebaseOptions(contentsOfFile: filePath) {
+            FirebaseApp.configure(options: options)
+            print("==> Firebase configured thành công từ GoogleService-Info.plist")
+        } else {
+            print("⚠️ CẢNH BÁO: KHÔNG tìm thấy file GoogleService-Info.plist. Bỏ qua khởi tạo Firebase để tránh văng App trên 3uTools.")
+        }
     }
 
     // MARK: - APNs Remote Notifications
