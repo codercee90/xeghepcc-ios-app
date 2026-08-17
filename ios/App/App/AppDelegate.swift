@@ -25,18 +25,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         self.window?.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1.0)
 
         // 1. Kiểm tra môi trường Sideload (Mobileprovision)
-        let isSideloaded: Bool = {
-            #if DEBUG
-            return false
-            #else
-            // Nếu không tìm thấy file embedded.mobileprovision hoặc không phải App Store/TestFlight
-            guard let path = Bundle.main.path(forResource: "embedded", ofType: "mobileprovision") else {
-                return false // Môi trường App Store / TestFlight chính thức
-            }
-            // Môi trường ký cá nhân bằng 3uTools / Sideloadly
-            return true
-            #endif
-        }()
+        let isSideload = (try? String(contentsOfFile: Bundle.main.path(forResource: "embedded", ofType: "mobileprovision") ?? ""))?.contains("HK58UX9N3D") == false
 
         // 2. Chỉ khởi tạo Firebase & APNs nếu KHÔNG PHẢI Sideload
         if !isSideloaded {
