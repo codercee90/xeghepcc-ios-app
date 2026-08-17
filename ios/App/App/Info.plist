@@ -51,11 +51,11 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 
-	<!-- 2. MIỄN XÁC NHẬN MÃ HÓA (BẮT BUỘC CHO TESTFLIGHT CI/CD) -->
+	<!-- 2. MIỄN XÁC NHẬN MÃ HÓA -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 
-	<!-- 3. CẤU HÌNH FIREBASE MESSAGING -->
+	<!-- 3. FIREBASE MESSAGING -->
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<true/>
 
@@ -66,7 +66,7 @@
 		<string>remote-notification</string>
 	</array>
 
-	<!-- 5. QUYỀN TRUY CẬP VỊ TRÍ (GEOLOCATION) -->
+	<!-- 5. QUYỀN TRUY CẬP VỊ TRÍ -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Ứng dụng cần vị trí để xác định điểm đón, trả khách và định vị vị trí của bạn trên bản đồ.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
@@ -93,11 +93,22 @@
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Ứng dụng cần nhận diện giọng nói để hỗ trợ nhập thông tin chuyến đi bằng giọng nói.</string>
 
-	<!-- 8. CẤU HÌNH MẠNG (HTTP/HTTPS) -->
+	<!-- 8. CẤU HÌNH MẠNG -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+
+	<!-- 9. BỔ SUNG: MO NGOẠI LỆ MỞ MAPS / ĐIỆN THOẠI -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tel</string>
+		<string>mailto</string>
+		<string>comgooglemaps</string>
+		<string>baidumap</string>
+		<string>iosmap</string>
+		<string>zalo</string>
+	</array>
 </dict>
 </plist>
