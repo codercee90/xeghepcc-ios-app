@@ -24,20 +24,39 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         self.window?.backgroundColor = UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1.0)
 
-        // 1. Khởi tạo Firebase
-        if let filePath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
-           let options = FirebaseOptions(contentsOfFile: filePath) {
-            FirebaseApp.configure(options: options)
+        // 1. Kiểm tra môi trường Sideload (Mobileprovision)
+        let isSideloaded: Bool = {
+            #if DEBUG
+            return false
+            #else
+            // Nếu không tìm thấy file embedded.mobileprovision hoặc không phải App Store/TestFlight
+            guard let path = Bundle.main.path(forResource: "embedded", ofType: "mobileprovision") else {
+                return false // Môi trường App Store / TestFlight chính thức
+            }
+            // Môi trường ký cá nhân bằng 3uTools / Sideloadly
+            return true
+            #endif
+        }()
+
+        // 2. Chỉ khởi tạo Firebase & APNs nếu KHÔNG PHẢI Sideload
+        if !isSideloaded {
+            // 1. Khởi tạo Firebase
+            if let filePath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+               let options = FirebaseOptions(contentsOfFile: filePath) {
+                FirebaseApp.configure(options: options)
+            } else {
+                FirebaseApp.configure()
+            }
+    
+            // 2. Setup Delegates
+            UNUserNotificationCenter.current().delegate = self
+            Messaging.messaging().delegate = self
+    
+            // 3. Đăng ký APNs
+            application.registerForRemoteNotifications()
         } else {
-            FirebaseApp.configure()
+            print("==> Phát hiện môi trường Sideload: Đã tắt Firebase & Push Notifications để tránh văng App.")
         }
-
-        // 2. Setup Delegates
-        UNUserNotificationCenter.current().delegate = self
-        Messaging.messaging().delegate = self
-
-        // 3. Đăng ký APNs
-        application.registerForRemoteNotifications()
 
         return true
     }
